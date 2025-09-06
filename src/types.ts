@@ -58,7 +58,7 @@ export interface WindowState {
 }
 
 export interface WindowAction {
-  type: 'move' | 'resize' | 'minimize' | 'maximize' | 'focus' | 'arrange' | 'close'
+  type: 'move' | 'resize' | 'minimize' | 'maximize' | 'restore' | 'focus' | 'arrange' | 'close'
   targetWindow?: string
   targetWindows?: string[]
   parameters?: {

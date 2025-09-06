@@ -29,6 +29,7 @@ async function createWindow() {
     titleBarStyle: "hiddenInset",
     vibrancy: "sidebar",
     backgroundColor: "#00000000",
+    alwaysOnTop: false,
   });
 
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
@@ -74,14 +75,17 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-
+  
   // APIキーを確認
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.error("ANTHROPIC_API_KEY is not set in .env file");
-    dialog.showErrorBox("API Key Missing", "Please set ANTHROPIC_API_KEY in .env file");
+    dialog.showErrorBox(
+      "API Key Missing",
+      "Please set ANTHROPIC_API_KEY in .env file"
+    );
   }
-  
+
   claudeService = new ClaudeService(apiKey || "");
   windowManager = new WindowManager(claudeService);
 
@@ -131,15 +135,15 @@ app.whenReady().then(async () => {
       console.log("Analyzing windows with intent:", userIntent);
       const currentState = await windowManager.getWindowState();
       console.log(`Found ${currentState.windows.length} windows`);
-      
+
       const response = await claudeService.analyzeWindowState(
         currentState,
         userIntent
       );
-      
+
       console.log("AI Response:", response);
       console.log("Actions to execute:", response.actions);
-      
+
       return response.actions;
     }
   );
@@ -147,7 +151,18 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     "execute-action",
     async (_, action: WindowAction): Promise<boolean> => {
-      return await windowManager.executeAction(action);
+      const result = await windowManager.executeAction(action);
+      
+      // 最小化・復元後にアプリウィンドウにフォーカスを保つ
+      if (result && (action.type === "minimize" || action.type === "restore")) {
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.focus();
+          }
+        }, 100);
+      }
+      
+      return result;
     }
   );
 
@@ -156,32 +171,43 @@ app.whenReady().then(async () => {
     async (_, actions: WindowAction[]): Promise<boolean[]> => {
       console.log(`Executing ${actions.length} actions`);
       const results: boolean[] = [];
-      
+
       for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
-        console.log(`Executing action ${i + 1}/${actions.length}:`, action.type);
-        
+        console.log(
+          `Executing action ${i + 1}/${actions.length}:`,
+          action.type
+        );
+
         const success = await windowManager.executeAction(action);
         results.push(success);
         
+        // 各アクション後にフォーカスを維持
+        if (success && (action.type === "minimize" || action.type === "restore")) {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.focus();
+          }
+        }
+
         if (!success) {
           console.error(`Action ${i + 1} failed, stopping execution`);
           break;
         }
       }
-      
-      console.log(`Execution results: ${results.filter(r => r).length}/${actions.length} succeeded`);
+
+      console.log(
+        `Execution results: ${results.filter((r) => r).length}/${
+          actions.length
+        } succeeded`
+      );
       return results;
     }
   );
   
-  ipcMain.handle(
-    "quit-app",
-    async (_, appName: string): Promise<boolean> => {
-      console.log(`Quit app request: ${appName}`);
-      return await windowManager.quitApp(appName);
-    }
-  );
+  ipcMain.handle("quit-app", async (_, appName: string): Promise<boolean> => {
+    console.log(`Quit app request: ${appName}`);
+    return await windowManager.quitApp(appName);
+  });
 
   ipcMain.handle(
     "get-cpu-info",
