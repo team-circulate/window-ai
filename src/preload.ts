@@ -30,6 +30,15 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("get-cpu-info");
   },
 
+  // フォーカス統計関連
+  getFocusStats: (): Promise<any> => {
+    return ipcRenderer.invoke("get-focus-stats");
+  },
+
+  getDataInfo: (): Promise<any> => {
+    return ipcRenderer.invoke("get-data-info");
+  },
+
   // リアルタイム更新のためのイベントリスナー
   onActiveAppChanged: (callback: (appName: string) => void) => {
     ipcRenderer.on('active-app-changed', (_, appName) => callback(appName));
@@ -46,6 +55,8 @@ declare global {
       getAppIcon: (appName: string) => Promise<string | null>;
       quitApp: (appName: string) => Promise<boolean>;
       getCpuInfo: () => Promise<CpuInfo>;
+      getFocusStats: () => Promise<any>;
+      getDataInfo: () => Promise<any>;
       onActiveAppChanged: (callback: (appName: string) => void) => void;
     };
   }

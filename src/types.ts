@@ -84,3 +84,30 @@ export interface AIResponse {
   explanation: string
   confidence: number
 }
+
+// フォーカスログ関連の型定義
+export interface FocusSession {
+  appName: string;            // "Safari", "Chrome" (正式名称)
+  startTime: number;          // 開始時間 (UNIX timestamp)
+  endTime: number;            // 終了時間 (UNIX timestamp)
+  duration: number;           // 実際のフォーカス時間(秒)
+  date: string;              // "2025-01-01" 日付別分析用
+}
+
+export interface AppStats {
+  appName: string;
+  totalSessions: number;      // 総セッション数
+  totalFocusTime: number;     // 総フォーカス時間(秒)
+  averageSessionTime: number; // 平均セッション時間
+  lastUsed: number;          // 最後の使用時間
+  openWindows: number;       // 現在開いているウィンドウ数
+  cpuUsage: number;          // CPU使用率
+  memoryUsage: number;       // メモリ使用量
+}
+
+export interface TimingConfig {
+  focusMonitoring: number;    // フォーカス監視間隔
+  dataSaving: number;         // データ保存間隔
+  analysis: number;           // AI分析間隔
+  testMode: boolean;          // テストモード
+}

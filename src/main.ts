@@ -14,11 +14,13 @@ import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./windowManager";
 import { ClaudeService } from "./claudeService";
+import { FocusLogger } from "./focusLogger";
 import { WindowState, WindowAction } from "./types";
 
 let mainWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
+let focusLogger: FocusLogger;
 let tray: Tray | null = null;
 
 async function createWindow() {
@@ -311,6 +313,7 @@ app.whenReady().then(async () => {
 
   claudeService = new ClaudeService(apiKey || "");
   windowManager = new WindowManager(claudeService);
+  focusLogger = new FocusLogger();
 
   createWindow();
   createTray();
@@ -326,6 +329,10 @@ app.whenReady().then(async () => {
         // 前回と異なる場合のみ更新（不要な処理を避ける）
         if (currentActiveApp !== lastKnownActiveApp) {
           console.log(`🔄 Active app changed: ${lastKnownActiveApp} → ${currentActiveApp}`);
+          
+          // フォーカスロガーに変更を通知
+          await focusLogger.onFocusChange(currentActiveApp);
+          
           lastKnownActiveApp = currentActiveApp;
           
           // フロントエンドにリアルタイム通知
@@ -508,12 +515,47 @@ app.whenReady().then(async () => {
       return await windowManager.getCpuInfo();
     }
   );
+
+  ipcMain.handle(
+    "get-focus-stats",
+    async () => {
+      console.log("Getting focus stats...");
+      try {
+        const stats = await focusLogger.getAllStats();
+        console.log("Loaded focus stats:", stats);
+        return stats;
+      } catch (error) {
+        console.error('Error getting focus stats:', error);
+        return [];
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-data-info",
+    async () => {
+      console.log("Getting data store info");
+      try {
+        return await focusLogger.getDataInfo();
+      } catch (error) {
+        console.error('Error getting data info:', error);
+        return null;
+      }
+    }
+  );
 });
 
 app.on("window-all-closed", () => {
   // macOSでは、Trayアイコンがあるため、すべてのウィンドウが閉じてもアプリを終了しない
   // 他のプラットフォームでも同様の動作にする（Trayアイコンで常駐）
   // app.quit()を呼ばないことで、アプリはバックグラウンドで動作し続ける
+});
+
+app.on("before-quit", () => {
+  // アプリ終了時にフォーカスロガーをクリーンアップ
+  if (focusLogger) {
+    focusLogger.destroy();
+  }
 });
 
 app.on("activate", () => {

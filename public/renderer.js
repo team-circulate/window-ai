@@ -30,6 +30,12 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshCpuInfo();
   }, 5000);
 
+  // 統計画面の初期化
+  initializeStatistics();
+  
+  // 統計更新ボタンのイベントリスナー
+  document.getElementById('statsRefreshBtn').addEventListener('click', loadFocusStatistics);
+
   // Quick action buttons
   document.querySelectorAll(".quick-action").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -480,4 +486,278 @@ function addLog(message, type = "info") {
   while (logContainer.children.length > 10) {
     logContainer.removeChild(logContainer.lastChild);
   }
+}
+
+// 統計関連の関数
+let focusChart = null;
+
+async function initializeStatistics() {
+  try {
+    // 時間範囲セレクターのイベントリスナー
+    document.getElementById('timeRange').addEventListener('change', loadFocusStatistics);
+    
+    // 初期データの読み込み
+    await loadFocusStatistics();
+    await loadDataInfo();
+    
+    // 5分ごとに統計を更新
+    setInterval(() => {
+      loadFocusStatistics();
+      loadDataInfo();
+    }, 5 * 60 * 1000);
+    
+    console.log('📊 Statistics initialized');
+  } catch (error) {
+    console.error('Error initializing statistics:', error);
+  }
+}
+
+async function loadFocusStatistics() {
+  try {
+    console.log('🔄 Loading focus statistics...');
+    const timeRange = document.getElementById('timeRange').value;
+    console.log('Selected time range:', timeRange);
+    
+    const stats = await window.windowAPI.getFocusStats();
+    console.log('Raw stats from API:', stats);
+    
+    // 統計データを使用時間順にソート
+    const sortedStats = stats.sort((a, b) => b.totalFocusTime - a.totalFocusTime);
+    
+    // 時間範囲によるフィルタリング
+    let filteredStats = sortedStats;
+    const now = new Date();
+    
+    if (timeRange === 'today') {
+      const today = new Date().toISOString().split('T')[0];
+      const todayStart = new Date(today).getTime();
+      filteredStats = sortedStats.filter(stat => stat.lastUsed > todayStart);
+      console.log('Today filtered stats:', filteredStats);
+    } else if (timeRange === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      filteredStats = sortedStats.filter(stat => stat.lastUsed > weekAgo.getTime());
+    } else if (timeRange === 'month') {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      filteredStats = sortedStats.filter(stat => stat.lastUsed > monthAgo.getTime());
+    }
+    
+    console.log('Final filtered stats:', filteredStats);
+    
+    displayStatisticsSummary(filteredStats);
+    displayFocusChart(filteredStats);
+    displayStatisticsTable(filteredStats);
+    
+  } catch (error) {
+    console.error('Error loading focus statistics:', error);
+    document.getElementById('statsSummary').innerHTML = '<p style="color: #ff6b6b;">統計データの読み込みに失敗しました: ' + error.message + '</p>';
+  }
+}
+
+function displayStatisticsSummary(stats) {
+  const summaryContainer = document.getElementById('statsSummary');
+  
+  if (stats.length === 0) {
+    summaryContainer.innerHTML = '<p>まだフォーカスデータがありません</p>';
+    return;
+  }
+  
+  const totalTime = stats.reduce((sum, stat) => sum + stat.totalFocusTime, 0);
+  const totalSessions = stats.reduce((sum, stat) => sum + stat.totalSessions, 0);
+  const avgSessionTime = totalSessions > 0 ? totalTime / totalSessions : 0;
+  
+  // 最も使用されているアプリ
+  const topApp = stats.length > 0 ? stats[0] : null;
+  
+  summaryContainer.innerHTML = `
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-value">${formatDuration(totalTime)}</div>
+        <div class="summary-label">総フォーカス時間</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-value">${totalSessions}</div>
+        <div class="summary-label">総セッション数</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-value">${formatDuration(avgSessionTime)}</div>
+        <div class="summary-label">平均セッション時間</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-value">${topApp ? topApp.appName : 'N/A'}</div>
+        <div class="summary-label">最も使用されたアプリ</div>
+      </div>
+    </div>
+  `;
+}
+
+function displayFocusChart(stats) {
+  const ctx = document.getElementById('focusChart').getContext('2d');
+  
+  // 既存のチャートを破棄
+  if (focusChart) {
+    focusChart.destroy();
+  }
+  
+  if (stats.length === 0) {
+    ctx.fillStyle = '#666';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('データがありません', ctx.canvas.width / 2, ctx.canvas.height / 2);
+    return;
+  }
+  
+  // 上位10アプリのみ表示
+  const topStats = stats.slice(0, 10);
+  
+  const labels = topStats.map(stat => stat.appName);
+  const data = topStats.map(stat => Math.round(stat.totalFocusTime / 60)); // 分単位
+  
+  // カラーパレット
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
+  ];
+  
+  focusChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: colors.slice(0, topStats.length),
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            color: '#fff',
+            font: {
+              size: 12
+            },
+            generateLabels: function(chart) {
+              const data = chart.data;
+              return data.labels.map((label, i) => ({
+                text: `${label} (${data.datasets[0].data[i]}分)`,
+                fillStyle: data.datasets[0].backgroundColor[i],
+                index: i
+              }));
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.parsed;
+              const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+              const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+              return `${label}: ${value}分 (${percentage}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function displayStatisticsTable(stats) {
+  const tableContainer = document.getElementById('statsTable');
+  
+  if (stats.length === 0) {
+    tableContainer.innerHTML = '<p>データがありません</p>';
+    return;
+  }
+  
+  const tableHtml = `
+    <table class="stats-table">
+      <thead>
+        <tr>
+          <th>アプリ名</th>
+          <th>総フォーカス時間</th>
+          <th>セッション数</th>
+          <th>平均セッション時間</th>
+          <th>最後の使用</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${stats.map(stat => `
+          <tr>
+            <td class="app-name">${stat.appName}</td>
+            <td class="focus-time">${formatDuration(stat.totalFocusTime)}</td>
+            <td class="session-count">${stat.totalSessions}</td>
+            <td class="avg-time">${formatDuration(stat.averageSessionTime)}</td>
+            <td class="last-used">${formatDate(stat.lastUsed)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  
+  tableContainer.innerHTML = tableHtml;
+}
+
+async function loadDataInfo() {
+  try {
+    const dataInfo = await window.windowAPI.getDataInfo();
+    const dataInfoContainer = document.getElementById('dataInfo');
+    
+    dataInfoContainer.innerHTML = `
+      <div class="data-info-grid">
+        <div class="data-info-item">
+          <span class="data-info-label">総セッション数:</span>
+          <span class="data-info-value">${dataInfo.totalSessions}</span>
+        </div>
+        <div class="data-info-item">
+          <span class="data-info-label">追跡アプリ数:</span>
+          <span class="data-info-value">${dataInfo.totalApps}</span>
+        </div>
+        <div class="data-info-item">
+          <span class="data-info-label">データサイズ:</span>
+          <span class="data-info-value">${dataInfo.dataSize}</span>
+        </div>
+        <div class="data-info-item">
+          <span class="data-info-label">最終更新:</span>
+          <span class="data-info-value">${new Date(dataInfo.lastUpdated).toLocaleString()}</span>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error loading data info:', error);
+  }
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) {
+    return `${seconds}秒`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return remainingSeconds > 0 ? `${minutes}分${remainingSeconds}秒` : `${minutes}分`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const remainingMinutes = Math.floor((seconds % 3600) / 60);
+    return remainingMinutes > 0 ? `${hours}時間${remainingMinutes}分` : `${hours}時間`;
+  }
+}
+
+function formatDate(timestamp) {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  
+  if (diffMins < 1) return 'たった今';
+  if (diffMins < 60) return `${diffMins}分前`;
+  if (diffHours < 24) return `${diffHours}時間前`;
+  if (diffDays < 7) return `${diffDays}日前`;
+  
+  return date.toLocaleDateString('ja-JP');
 }
