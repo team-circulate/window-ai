@@ -315,6 +315,31 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   
+  // リアルタイムアクティブアプリ監視 - 実際の入力フォーカスを追跡
+  let lastKnownActiveApp: string = '';
+  setInterval(async () => {
+    if (windowManager && mainWindow) {
+      try {
+        // 実際にフォーカスされているアプリを直接取得
+        const currentActiveApp = await windowManager.getCurrentActiveApp();
+        
+        // 前回と異なる場合のみ更新（不要な処理を避ける）
+        if (currentActiveApp !== lastKnownActiveApp) {
+          console.log(`🔄 Active app changed: ${lastKnownActiveApp} → ${currentActiveApp}`);
+          lastKnownActiveApp = currentActiveApp;
+          
+          // フロントエンドにリアルタイム通知
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('active-app-changed', currentActiveApp);
+          }
+        }
+      } catch (error) {
+        // エラーが発生しても継続
+        console.error('Error in active app monitoring:', error);
+      }
+    }
+  }, 1000); // 1秒間隔でリアルタイム監視
+  
   // Trayのツールチップを定期的に更新（CPU使用率を表示）
   setInterval(async () => {
     if (tray && windowManager) {
@@ -326,6 +351,34 @@ app.whenReady().then(async () => {
       }
     }
   }, 5000); // 5秒ごとに更新
+
+  // アプリのフォーカス変更を検知してアクティブアプリ情報を更新
+  app.on('browser-window-focus', () => {
+    // Electronアプリがフォーカスされたとき
+    console.log('Electron app focused');
+  });
+
+  app.on('browser-window-blur', () => {
+    // Electronアプリがフォーカスを失ったとき
+    console.log('Electron app lost focus - updating active app info');
+    // フォーカスを失った後、少し待ってからアクティブアプリを更新
+    setTimeout(async () => {
+      if (mainWindow && windowManager) {
+        try {
+          // 新しいアクティブアプリを強制的に検出
+          const windowState = await windowManager.getWindowState();
+          console.log('Updated active app on blur:', windowState.activeApp);
+          
+          // IPCでフロントエンドにも通知（リアルタイム更新）
+          if (mainWindow) {
+            mainWindow.webContents.send('active-app-changed', windowState.activeApp);
+          }
+        } catch (error) {
+          console.error('Error updating active app on blur:', error);
+        }
+      }
+    }, 300); // 少し長めの待機時間
+  });
 
   ipcMain.handle("get-window-state", async (): Promise<WindowState> => {
     return await windowManager.getWindowState();

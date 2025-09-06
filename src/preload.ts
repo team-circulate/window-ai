@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld("windowAPI", {
   getCpuInfo: (): Promise<CpuInfo> => {
     return ipcRenderer.invoke("get-cpu-info");
   },
+
+  // リアルタイム更新のためのイベントリスナー
+  onActiveAppChanged: (callback: (appName: string) => void) => {
+    ipcRenderer.on('active-app-changed', (_, appName) => callback(appName));
+  },
 });
 
 declare global {
@@ -41,6 +46,7 @@ declare global {
       getAppIcon: (appName: string) => Promise<string | null>;
       quitApp: (appName: string) => Promise<boolean>;
       getCpuInfo: () => Promise<CpuInfo>;
+      onActiveAppChanged: (callback: (appName: string) => void) => void;
     };
   }
 }

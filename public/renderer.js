@@ -6,6 +6,14 @@ document.addEventListener("DOMContentLoaded", () => {
   refreshWindowList();
   refreshCpuInfo();
 
+  // リアルタイムアクティブアプリ更新のリスナー
+  if (window.windowAPI.onActiveAppChanged) {
+    window.windowAPI.onActiveAppChanged((appName) => {
+      console.log('Real-time active app update:', appName);
+      displayActiveApp(appName);
+    });
+  }
+
   // Event listeners
   document
     .getElementById("analyzeBtn")
@@ -50,6 +58,11 @@ async function refreshWindowList() {
     // CPU情報も一緒に表示
     if (windowState.cpuInfo) {
       displayCpuInfo(windowState.cpuInfo);
+    }
+
+    // アクティブアプリ情報を表示
+    if (windowState.activeApp) {
+      displayActiveApp(windowState.activeApp);
     }
 
     addLog(`${windowState.windows.length}個のウィンドウを検出`, "success");
@@ -361,6 +374,19 @@ async function quitApp(appName) {
   } catch (error) {
     addLog(`アプリ終了エラー: ${error.message}`, "error");
   }
+}
+
+function displayActiveApp(activeApp) {
+  const activeAppContainer = document.getElementById("activeAppInfo");
+  
+  if (!activeAppContainer) {
+    console.warn("Active app container not found");
+    return;
+  }
+
+  activeAppContainer.innerHTML = `
+    <div class="active-app-name">${activeApp}</div>
+  `;
 }
 
 function displayCpuInfo(cpuInfo) {
