@@ -29,6 +29,22 @@ contextBridge.exposeInMainWorld("windowAPI", {
   getCpuInfo: (): Promise<CpuInfo> => {
     return ipcRenderer.invoke("get-cpu-info");
   },
+  
+  hideWindow: (): Promise<void> => {
+    return ipcRenderer.invoke("hide-window");
+  },
+  
+  focusApp: (appName: string): Promise<boolean> => {
+    return ipcRenderer.invoke("focus-app", appName);
+  },
+
+  // Appモード開始/終了をメインプロセスへ通知
+  appModeStart: (): Promise<void> => {
+    return ipcRenderer.invoke("app-mode-start");
+  },
+  appModeEnd: (): Promise<void> => {
+    return ipcRenderer.invoke("app-mode-end");
+  },
 });
 
 declare global {
@@ -41,6 +57,8 @@ declare global {
       getAppIcon: (appName: string) => Promise<string | null>;
       quitApp: (appName: string) => Promise<boolean>;
       getCpuInfo: () => Promise<CpuInfo>;
+      hideWindow: () => Promise<void>;
+      focusApp: (appName: string) => Promise<boolean>;
     };
   }
 }

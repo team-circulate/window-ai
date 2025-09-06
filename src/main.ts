@@ -8,6 +8,8 @@ import {
   Tray,
   Menu,
   nativeTheme,
+  globalShortcut,
+  screen,
 } from "electron";
 import * as path from "path";
 import * as fs from "fs";
@@ -17,6 +19,7 @@ import { ClaudeService } from "./claudeService";
 import { WindowState, WindowAction } from "./types";
 
 let mainWindow: BrowserWindow | null = null;
+let spotlightWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
 let tray: Tray | null = null;
@@ -54,6 +57,72 @@ async function createWindow() {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+}
+
+function createSpotlightWindow() {
+  if (spotlightWindow) {
+    spotlightWindow.show();
+    spotlightWindow.focus();
+    return;
+  }
+
+  // スクリーンサイズを取得
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  
+  // ウィンドウサイズと位置を計算（画面上部中央）
+  const windowWidth = 600;
+  const windowHeight = 320; // 入力フィールド + サジェスション分の高さ
+  const x = Math.round((screenWidth - windowWidth) / 2);
+  const y = Math.round(screenHeight * 0.15); // 画面上部15%の位置
+
+  spotlightWindow = new BrowserWindow({
+    width: windowWidth,
+    height: windowHeight,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  spotlightWindow.loadFile(path.join(__dirname, "../public/spotlight.html"));
+  
+  // 開発時のみDevToolsを開く（必要に応じて）
+  // spotlightWindow.webContents.openDevTools({ mode: 'detach' });
+
+  // フォーカスが外れたら非表示にする
+  spotlightWindow.on('blur', () => {
+    if (spotlightWindow) {
+      try {
+        // Appモード終了をレンダラー経由で通知（ホットキー再登録のため）
+        spotlightWindow.webContents.executeJavaScript('window.windowAPI && window.windowAPI.appModeEnd && window.windowAPI.appModeEnd()');
+      } catch (e) {
+        console.error('Failed to notify appModeEnd on blur:', e);
+      }
+      spotlightWindow.hide();
+    }
+  });
+
+  spotlightWindow.on("closed", () => {
+    spotlightWindow = null;
+  });
+  
+  // ウィンドウを表示してフォーカス
+  spotlightWindow.show();
+  spotlightWindow.focus();
 }
 
 function createTray() {
@@ -116,74 +185,16 @@ function createTray() {
   // コンテキストメニューの作成
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "ウィンドウを表示",
+      label: "Spotlight検索を開く",
+      accelerator: "Option+Shift+W",
       click: () => {
-        if (!mainWindow) {
-          createWindow();
+        if (spotlightWindow) {
+          spotlightWindow.show();
+          spotlightWindow.focus();
         } else {
-          mainWindow.show();
-          if (app.dock) {
-            app.dock.show();
-          }
+          createSpotlightWindow();
         }
       },
-    },
-    {
-      label: "ウィンドウを隠す",
-      click: () => {
-        if (mainWindow) {
-          mainWindow.hide();
-          if (app.dock) {
-            app.dock.hide();
-          }
-        }
-      },
-    },
-    { type: "separator" },
-    {
-      label: "クイックアクション",
-      submenu: [
-        {
-          label: "左右に分割",
-          click: async () => {
-            if (!mainWindow) createWindow();
-            // AIに左右分割を依頼
-            const actions = await claudeService.analyzeWindowState(
-              await windowManager.getWindowState(),
-              "アクティブな2つのウィンドウを左右に並べて配置して"
-            );
-            for (const action of actions.actions) {
-              await windowManager.executeAction(action);
-            }
-          },
-        },
-        {
-          label: "グリッド表示",
-          click: async () => {
-            if (!mainWindow) createWindow();
-            const actions = await claudeService.analyzeWindowState(
-              await windowManager.getWindowState(),
-              "すべてのウィンドウをグリッド状に配置して"
-            );
-            for (const action of actions.actions) {
-              await windowManager.executeAction(action);
-            }
-          },
-        },
-        {
-          label: "中央に配置",
-          click: async () => {
-            if (!mainWindow) createWindow();
-            const actions = await claudeService.analyzeWindowState(
-              await windowManager.getWindowState(),
-              "アクティブなウィンドウを画面中央に配置して"
-            );
-            for (const action of actions.actions) {
-              await windowManager.executeAction(action);
-            }
-          },
-        },
-      ],
     },
     { type: "separator" },
     {
@@ -205,15 +216,17 @@ function createTray() {
     },
     { type: "separator" },
     {
-      label: "設定",
-      accelerator: "Command+,",
-      click: () => {
-        if (!mainWindow) {
-          createWindow();
-        } else {
-          mainWindow.show();
-        }
-      },
+      label: "ホットキー",
+      submenu: [
+        {
+          label: "Option+Shift+W: Spotlight検索を開く",
+          enabled: false,
+        },
+        {
+          label: "Option+Tab: アプリ切り替え",
+          enabled: false,
+        },
+      ],
     },
     { type: "separator" },
     {
@@ -228,22 +241,17 @@ function createTray() {
   // コンテキストメニューの設定
   tray.setContextMenu(contextMenu);
   
-  // クリックイベントの処理（macOSではコンテキストメニューの表示）
+  // クリックイベントの処理（Spotlightウィンドウの表示）
   tray.on("click", () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-        if (app.dock) {
-          app.dock.hide();
-        }
+    if (spotlightWindow) {
+      if (spotlightWindow.isVisible()) {
+        spotlightWindow.hide();
       } else {
-        mainWindow.show();
-        if (app.dock) {
-          app.dock.show();
-        }
+        spotlightWindow.show();
+        spotlightWindow.focus();
       }
     } else {
-      createWindow();
+      createSpotlightWindow();
     }
   });
   
@@ -312,20 +320,108 @@ app.whenReady().then(async () => {
   claudeService = new ClaudeService(apiKey || "");
   windowManager = new WindowManager(claudeService);
 
-  createWindow();
+  // メインウィンドウは作成せず、Spotlightウィンドウのみを使用
+  // createWindow();
   createTray();
+  
+  // グローバルホットキーの登録
+  // Option+Shift+W でSpotlightウィンドウの表示/非表示を切り替え
+  const toggleWindowHotkey = 'Option+Shift+W';
+  const hotkeyRegistered = globalShortcut.register(toggleWindowHotkey, () => {
+    if (spotlightWindow) {
+      if (spotlightWindow.isVisible()) {
+        spotlightWindow.hide();
+      } else {
+        spotlightWindow.show();
+        spotlightWindow.focus();
+      }
+    } else {
+      createSpotlightWindow();
+    }
+  });
+
+  if (!hotkeyRegistered) {
+    console.error(`Failed to register hotkey: ${toggleWindowHotkey}`);
+  } else {
+    console.log(`Global hotkey registered: ${toggleWindowHotkey}`);
+  }
+
+  // Option+Tab でアプリ切り替えモードを起動（次のアプリを自動選択）
+  const appSwitchHotkey = 'Option+Tab';
+  const triggerAppSwitchInit = () => {
+    if (!spotlightWindow) {
+      createSpotlightWindow();
+    }
+    setTimeout(() => {
+      if (spotlightWindow) {
+        spotlightWindow.show();
+        spotlightWindow.focus();
+        spotlightWindow.webContents.executeJavaScript('window.initAppModeWithNext && window.initAppModeWithNext()');
+      }
+    }, 100);
+  };
+
+  const registerAppSwitchHotkey = () => {
+    if (globalShortcut.isRegistered(appSwitchHotkey)) {
+      return true;
+    }
+    const ok = globalShortcut.register(appSwitchHotkey, () => {
+      triggerAppSwitchInit();
+    });
+    if (!ok) {
+      console.error(`Failed to register hotkey: ${appSwitchHotkey}`);
+    } else {
+      console.log(`Global hotkey registered: ${appSwitchHotkey}`);
+    }
+    return ok;
+  };
+
+  registerAppSwitchHotkey();
+
   
   // Trayのツールチップを定期的に更新（CPU使用率を表示）
   setInterval(async () => {
     if (tray && windowManager) {
       try {
         const cpuInfo = await windowManager.getCpuInfo();
-        tray.setToolTip(`Window AI Manager\nCPU: ${cpuInfo.usage.toFixed(1)}%`);
+        tray.setToolTip(`Window AI Manager\nCPU: ${cpuInfo.usage.toFixed(1)}%\n\nHotkey: ${toggleWindowHotkey}`);
       } catch (error) {
         // エラーが発生しても継続
       }
     }
   }, 5000); // 5秒ごとに更新
+
+  // Spotlightウィンドウ用のIPCハンドラー
+  ipcMain.handle("hide-window", async () => {
+    if (spotlightWindow) {
+      spotlightWindow.hide();
+    }
+  });
+
+  // Appモード開始/終了の通知に応じてグローバルショートカットを制御
+  ipcMain.handle("app-mode-start", async () => {
+    try {
+      if (globalShortcut.isRegistered(appSwitchHotkey)) {
+        globalShortcut.unregister(appSwitchHotkey);
+        console.log(`Global hotkey temporarily unregistered: ${appSwitchHotkey}`);
+      }
+    } catch (e) {
+      console.error('Error unregistering app switch hotkey on app-mode-start:', e);
+    }
+  });
+
+  ipcMain.handle("app-mode-end", async () => {
+    try {
+      registerAppSwitchHotkey();
+    } catch (e) {
+      console.error('Error re-registering app switch hotkey on app-mode-end:', e);
+    }
+  });
+
+  // アプリにフォーカスを移動
+  ipcMain.handle("focus-app", async (_, appName: string): Promise<boolean> => {
+    return await windowManager.focusApp(appName);
+  });
 
   ipcMain.handle("get-window-state", async (): Promise<WindowState> => {
     return await windowManager.getWindowState();
@@ -467,4 +563,10 @@ app.on("activate", () => {
   if (mainWindow === null) {
     createWindow();
   }
+});
+
+// アプリ終了時にグローバルショートカットを解除
+app.on("will-quit", () => {
+  // すべてのショートカットを解除
+  globalShortcut.unregisterAll();
 });
