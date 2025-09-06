@@ -13,6 +13,8 @@ export interface WindowInfo {
   isFocused: boolean
   isVisible: boolean
   isMaximized?: boolean
+  cpuUsage?: number // このアプリのCPU使用率
+  memoryUsage?: number // このアプリのメモリ使用量（MB）
 }
 
 export interface Display {
@@ -26,10 +28,32 @@ export interface Display {
   }
 }
 
+export interface CpuInfo {
+  model: string
+  cores: number
+  usage: number // 全体のCPU使用率（%）
+  processes: ProcessInfo[] // 上位プロセスの使用率
+}
+
+export interface ProcessInfo {
+  pid: number
+  name: string
+  cpuUsage: number // このプロセスのCPU使用率（%）
+  memoryUsage: number // メモリ使用量（MB）
+  description?: string // プロセスの説明（AIが生成）
+}
+
+export interface AppResourceUsage {
+  totalCpu: number
+  totalMemory: number
+  processCount: number
+}
+
 export interface WindowState {
   windows: WindowInfo[]
   displays: Display[]
   activeApp: string
+  cpuInfo?: CpuInfo
   timestamp: number
 }
 

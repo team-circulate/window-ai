@@ -76,8 +76,6 @@ app.whenReady().then(async () => {
     return;
   }
 
-  windowManager = new WindowManager();
-
   // APIキーを確認
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -89,6 +87,7 @@ app.whenReady().then(async () => {
   }
 
   claudeService = new ClaudeService(apiKey || "");
+  windowManager = new WindowManager(claudeService);
 
   createWindow();
 
@@ -153,7 +152,7 @@ app.whenReady().then(async () => {
     "execute-action",
     async (_, action: WindowAction): Promise<boolean> => {
       const result = await windowManager.executeAction(action);
-      
+
       // 最小化・復元後にアプリウィンドウにフォーカスを保つ
       if (result && (action.type === "minimize" || action.type === "restore")) {
         setTimeout(() => {
@@ -162,7 +161,7 @@ app.whenReady().then(async () => {
           }
         }, 100);
       }
-      
+
       return result;
     }
   );
@@ -182,9 +181,12 @@ app.whenReady().then(async () => {
 
         const success = await windowManager.executeAction(action);
         results.push(success);
-        
+
         // 各アクション後にフォーカスを維持
-        if (success && (action.type === "minimize" || action.type === "restore")) {
+        if (
+          success &&
+          (action.type === "minimize" || action.type === "restore")
+        ) {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.focus();
           }
@@ -209,6 +211,14 @@ app.whenReady().then(async () => {
     console.log(`Quit app request: ${appName}`);
     return await windowManager.quitApp(appName);
   });
+
+  ipcMain.handle(
+    "get-cpu-info",
+    async (): Promise<import("./types").CpuInfo> => {
+      console.log("Getting CPU info");
+      return await windowManager.getCpuInfo();
+    }
+  );
 });
 
 app.on("window-all-closed", () => {

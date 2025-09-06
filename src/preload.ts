@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { WindowState, WindowAction } from "./types";
+import { WindowState, WindowAction, CpuInfo } from "./types";
 
 contextBridge.exposeInMainWorld("windowAPI", {
   getWindowState: (): Promise<WindowState> => {
@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld("windowAPI", {
   quitApp: (appName: string): Promise<boolean> => {
     return ipcRenderer.invoke("quit-app", appName);
   },
+
+  getCpuInfo: (): Promise<CpuInfo> => {
+    return ipcRenderer.invoke("get-cpu-info");
+  },
 });
 
 declare global {
@@ -36,6 +40,7 @@ declare global {
       executeActions: (actions: WindowAction[]) => Promise<boolean[]>;
       getAppIcon: (appName: string) => Promise<string | null>;
       quitApp: (appName: string) => Promise<boolean>;
+      getCpuInfo: () => Promise<CpuInfo>;
     };
   }
 }
