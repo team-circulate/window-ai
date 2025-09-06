@@ -1,11 +1,13 @@
 let currentWindows = [];
 let iconCache = {}; // アイコンのキャッシュ
+let autoRefreshInterval = null;
+let selectedWindowIds = new Set();
 
 // Initialize
 document.addEventListener("DOMContentLoaded", async () => {
   refreshWindowList();
   refreshCpuInfo();
-  
+
   // 新しいアプリをチェック
   checkForNewApps();
 
@@ -13,32 +15,95 @@ document.addEventListener("DOMContentLoaded", async () => {
   document
     .getElementById("analyzeBtn")
     .addEventListener("click", analyzeAndExecute);
-  document
-    .getElementById("refreshBtn")
-    .addEventListener("click", refreshWindowList);
+  const refreshBtn = document.getElementById("refreshBtn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", refreshWindowList);
+  }
   document
     .getElementById("cpuRefreshBtn")
     .addEventListener("click", refreshCpuInfo);
+  // Open Save Preset dialog
+  const openSaveBtn = document.getElementById("openSavePresetDialogBtn");
+  if (openSaveBtn) {
+    openSaveBtn.addEventListener("click", () => {
+      document.getElementById("savePresetNameInput").value = "";
+      document.getElementById("savePresetDialog").style.display = "block";
+    });
+  }
+  const selectAllBtn = document.getElementById("selectAllWindowsBtn");
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener("click", () => {
+      const allIds = currentWindows.map((w) => w.id);
+      const allSelected = allIds.every((id) => selectedWindowIds.has(id));
+      if (allSelected) {
+        selectedWindowIds.clear();
+      } else {
+        selectedWindowIds = new Set(allIds);
+      }
+      displayWindows(currentWindows);
+      updateBulkActionBar();
+    });
+  }
+
+  // Bulk action buttons
+  const bulkCloseBtn = document.getElementById("bulkCloseBtn");
+  const bulkMinimizeBtn = document.getElementById("bulkMinimizeBtn");
+  const bulkQuitBtn = document.getElementById("bulkQuitBtn");
+  if (bulkCloseBtn)
+    bulkCloseBtn.addEventListener("click", () => bulkAction("close"));
+  // bulkMinimizeBtn の動作は updateBulkActionBar() 内で切り替える
+  if (bulkQuitBtn)
+    bulkQuitBtn.addEventListener("click", () => bulkAction("quit"));
+  // (hero refresh button removed)
+  document.getElementById("windowRefreshBtn").addEventListener("click", () => {
+    refreshWindowList();
+    refreshCpuInfo();
+  });
+  // closeAllAppsBtn は削除済み。存在する場合のみバインド（後方互換）
+  const closeAllBtn = document.getElementById("closeAllAppsBtn");
+  if (closeAllBtn) {
+    closeAllBtn.addEventListener("click", showCloseAllAppsDialog);
+  }
+
+  // Auto refresh toggle
   document
-    .getElementById("closeAllAppsBtn")
-    .addEventListener("click", showCloseAllAppsDialog);
-  
-  // App search event listeners
-  document
-    .getElementById("searchAppsBtn")
-    .addEventListener("click", searchApps);
-  document
-    .getElementById("appSearchInput")
-    .addEventListener("keypress", (e) => {
-      if (e.key === "Enter") {
-        searchApps();
+    .getElementById("autoRefreshCheckbox")
+    .addEventListener("change", (e) => {
+      if (e.target.checked) {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
       }
     });
-  
-  // リアルタイム検索
+
+  // Preset event listeners (legacy input row may not exist)
+  const legacySaveBtn = document.getElementById("savePresetBtn");
+  if (legacySaveBtn) {
+    legacySaveBtn.addEventListener("click", savePreset);
+  }
+  const legacyNameInput = document.getElementById("presetNameInput");
+  if (legacyNameInput) {
+    legacyNameInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        savePreset();
+      }
+    });
+  }
+
+  // Task-based app suggestion event listeners
   document
-    .getElementById("appSearchInput")
-    .addEventListener("input", debounce(searchApps, 300));
+    .getElementById("suggestAppsBtn")
+    .addEventListener("click", suggestAppsForTask);
+  document
+    .getElementById("taskPromptInput")
+    .addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        suggestAppsForTask();
+      }
+    });
+
+  // Load presets on startup with retry for robustness
+  await loadPresetsWithRetry(3, 300);
 
   // Auto-refresh CPU info every 5 seconds
   setInterval(() => {
@@ -64,7 +129,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 async function refreshWindowList() {
   try {
-    addLog("ウィンドウ情報を取得中...", "info");
     const windowState = await window.windowAPI.getWindowState();
     currentWindows = windowState.windows;
 
@@ -75,7 +139,10 @@ async function refreshWindowList() {
       displayCpuInfo(windowState.cpuInfo);
     }
 
-    addLog(`${windowState.windows.length}個のウィンドウを検出`, "success");
+    // 自動更新中は詳細ログを出さない
+    if (!autoRefreshInterval) {
+      addLog(`${windowState.windows.length}個のウィンドウを検出`, "success");
+    }
   } catch (error) {
     addLog(`エラー: ${error.message}`, "error");
   }
@@ -83,10 +150,13 @@ async function refreshWindowList() {
 
 async function refreshCpuInfo() {
   try {
-    addLog("CPU情報を取得中...", "info");
     const cpuInfo = await window.windowAPI.getCpuInfo();
     displayCpuInfo(cpuInfo);
-    addLog("CPU情報を更新しました", "success");
+
+    // 自動更新中は詳細ログを出さない
+    if (!autoRefreshInterval) {
+      addLog("CPU情報を更新しました", "success");
+    }
   } catch (error) {
     addLog(`CPU情報取得エラー: ${error.message}`, "error");
   }
@@ -163,8 +233,12 @@ function displayWindows(windows) {
     `
           : "";
 
+      const checked = selectedWindowIds.has(window.id) ? "checked" : "";
       return `
     <div class="window-item">
+      <input type="checkbox" class="win-select" data-id="${
+        window.id
+      }" ${checked} style="margin-right: 6px;">
       <div class="window-info" onclick="focusWindow('${
         window.id
       }')" style="cursor: pointer;">
@@ -173,7 +247,9 @@ function displayWindows(windows) {
           <div class="window-main-info">
             <strong>
               ${window.appName}
-              <button class="app-info-btn" onclick="event.stopPropagation(); showAppInfo('${window.appName}')" title="アプリ情報">
+              <button class="app-info-btn" onclick="event.stopPropagation(); showAppInfo('${
+                window.appName
+              }')" title="アプリ情報">
                 i
               </button>
             </strong>
@@ -201,6 +277,78 @@ function displayWindows(windows) {
   `;
     })
     .join("");
+
+  // bind checkbox handlers
+  windowList.querySelectorAll(".win-select").forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      const id = e.target.getAttribute("data-id");
+      if (e.target.checked) selectedWindowIds.add(id);
+      else selectedWindowIds.delete(id);
+      updateBulkActionBar();
+    });
+  });
+
+  updateBulkActionBar();
+}
+
+function updateBulkActionBar() {
+  const bar = document.getElementById("bulkActionBar");
+  if (!bar) return;
+  const count = selectedWindowIds.size;
+  if (count > 0) {
+    bar.style.display = "flex";
+    const text = document.getElementById("bulkCountText");
+    if (text) text.textContent = `${count}個のウィンドウ`;
+
+    // Toggle minimize/restore label based on selection state
+    const bulkMinBtn = document.getElementById("bulkMinimizeBtn");
+    if (bulkMinBtn) {
+      const allMinimized = currentWindows
+        .filter((w) => selectedWindowIds.has(w.id))
+        .every((w) => w.isMinimized);
+
+      // Update label and click handler dynamically
+      if (allMinimized) {
+        bulkMinBtn.innerHTML =
+          '<span class="material-icons">north_east</span> 取り出す';
+        bulkMinBtn.onclick = () => bulkAction("restore");
+      } else {
+        bulkMinBtn.innerHTML =
+          '<span class="material-icons">minimize</span> 最小化';
+        bulkMinBtn.onclick = () => bulkAction("minimize");
+      }
+    }
+  } else {
+    bar.style.display = "none";
+  }
+}
+
+async function bulkAction(kind) {
+  const ids = Array.from(selectedWindowIds);
+  if (ids.length === 0) return;
+  try {
+    if (kind === "quit") {
+      // group by appName and quit
+      const selected = currentWindows.filter((w) => ids.includes(w.id));
+      const appNames = [...new Set(selected.map((w) => w.appName))];
+      for (const appName of appNames) {
+        await window.windowAPI.quitApp(appName);
+      }
+    } else if (kind === "minimize" || kind === "close") {
+      for (const id of ids) {
+        await window.windowAPI.executeAction({
+          type: kind,
+          targetWindow: id,
+          reasoning: "Bulk action",
+        });
+      }
+    }
+    addLog(`一括操作(${kind})を実行: ${ids.length}件`, "success");
+    selectedWindowIds.clear();
+    setTimeout(refreshWindowList, 300);
+  } catch (error) {
+    addLog(`一括操作エラー: ${error.message}`, "error");
+  }
 }
 
 async function analyzeAndExecute() {
@@ -603,17 +751,21 @@ async function confirmCloseAllApps() {
 async function showAppInfo(appName) {
   try {
     const observations = await window.windowAPI.getAppInfo(appName);
-    
-    document.getElementById('appInfoTitle').textContent = appName;
-    const contentDiv = document.getElementById('appInfoContent');
-    
+
+    document.getElementById("appInfoTitle").textContent = appName;
+    const contentDiv = document.getElementById("appInfoContent");
+
     if (observations && observations.length > 0) {
-      contentDiv.innerHTML = observations.map(obs => `
+      contentDiv.innerHTML = observations
+        .map(
+          (obs) => `
         <div class="observation-item">
           <span class="material-icons">lens</span>
           <span>${obs}</span>
         </div>
-      `).join('');
+      `
+        )
+        .join("");
     } else {
       contentDiv.innerHTML = `
         <div class="observation-item">
@@ -621,19 +773,23 @@ async function showAppInfo(appName) {
           <span>情報を取得中...</span>
         </div>
       `;
-      
+
       // Refresh window list to trigger description generation
       setTimeout(async () => {
         await refreshWindowList();
         // Try again after refresh
         const newObservations = await window.windowAPI.getAppInfo(appName);
         if (newObservations && newObservations.length > 0) {
-          contentDiv.innerHTML = newObservations.map(obs => `
+          contentDiv.innerHTML = newObservations
+            .map(
+              (obs) => `
             <div class="observation-item">
               <span class="material-icons">lens</span>
               <span>${obs}</span>
             </div>
-          `).join('');
+          `
+            )
+            .join("");
         } else {
           contentDiv.innerHTML = `
             <div class="observation-item">
@@ -644,34 +800,37 @@ async function showAppInfo(appName) {
         }
       }, 100);
     }
-    
-    document.getElementById('appInfoModal').style.display = 'block';
+
+    document.getElementById("appInfoModal").style.display = "block";
   } catch (error) {
-    console.error('Error showing app info:', error);
-    addLog(`アプリ情報の取得エラー: ${error.message}`, 'error');
+    console.error("Error showing app info:", error);
+    addLog(`アプリ情報の取得エラー: ${error.message}`, "error");
   }
 }
 
 function closeAppInfoModal() {
-  document.getElementById('appInfoModal').style.display = 'none';
+  document.getElementById("appInfoModal").style.display = "none";
 }
 
 // Check for new apps function
 async function checkForNewApps() {
   try {
     const result = await window.windowAPI.checkNewApps();
-    
+
     if (result.newAppsFound) {
-      console.log(`新しいアプリが ${result.apps.length} 個見つかりました:`, result.apps);
-      addLog(`新しいアプリを分析しました: ${result.apps.join(', ')}`, 'info');
-      
+      console.log(
+        `新しいアプリが ${result.apps.length} 個見つかりました:`,
+        result.apps
+      );
+      addLog(`新しいアプリを分析しました: ${result.apps.join(", ")}`, "info");
+
       // ウィンドウリストを更新して新しい情報を反映
       setTimeout(() => {
         refreshWindowList();
       }, 1000);
     }
   } catch (error) {
-    console.error('新しいアプリのチェックエラー:', error);
+    console.error("新しいアプリのチェックエラー:", error);
   }
 }
 
@@ -680,16 +839,16 @@ async function searchApps() {
   const searchInput = document.getElementById("appSearchInput");
   const query = searchInput.value.trim();
   const resultsDiv = document.getElementById("appSearchResults");
-  
+
   if (!query) {
     resultsDiv.innerHTML = "";
     return;
   }
-  
+
   try {
     // 検索を実行
     const apps = await window.windowAPI.searchApps(query);
-    
+
     if (apps.length === 0) {
       resultsDiv.innerHTML = `
         <div class="no-results">
@@ -699,41 +858,55 @@ async function searchApps() {
       `;
       return;
     }
-    
+
     // 検索結果を表示
-    resultsDiv.innerHTML = apps.map(app => {
-      // アイコンを取得（キャッシュがあればそれを使用）
-      const iconHtml = `
+    resultsDiv.innerHTML = apps
+      .map((app) => {
+        // アイコンを取得（キャッシュがあればそれを使用）
+        const iconHtml = `
         <div class="app-search-icon-placeholder">
           <span class="material-icons">apps</span>
         </div>
       `;
-      
-      return `
-        <div class="app-search-item" data-app-name="${app.name}" data-app-path="${app.path}">
+
+        return `
+        <div class="app-search-item" data-app-name="${
+          app.name
+        }" data-app-path="${app.path}">
           <div class="app-search-info">
             ${iconHtml}
             <div class="app-search-details">
               <div class="app-search-name">${app.name}</div>
-              ${app.version ? `<div class="app-search-version">バージョン: ${app.version}</div>` : ''}
+              ${
+                app.version
+                  ? `<div class="app-search-version">バージョン: ${app.version}</div>`
+                  : ""
+              }
             </div>
           </div>
-          <button class="app-launch-btn" onclick="launchApp('${app.name}', '${app.path}')">
+          <button class="app-launch-btn" onclick="launchApp('${app.name}', '${
+          app.path
+        }')">
             <span class="material-icons">launch</span>
             起動
           </button>
         </div>
       `;
-    }).join('');
-    
+      })
+      .join("");
+
     // アイコンを非同期で読み込む
-    apps.forEach(async app => {
+    apps.forEach(async (app) => {
       try {
         const icon = await window.windowAPI.getAppIcon(app.name);
         if (icon) {
-          const appItems = document.querySelectorAll(`[data-app-name="${app.name}"]`);
-          appItems.forEach(item => {
-            const iconPlaceholder = item.querySelector('.app-search-icon-placeholder');
+          const appItems = document.querySelectorAll(
+            `[data-app-name="${app.name}"]`
+          );
+          appItems.forEach((item) => {
+            const iconPlaceholder = item.querySelector(
+              ".app-search-icon-placeholder"
+            );
             if (iconPlaceholder) {
               iconPlaceholder.outerHTML = `<img src="${icon}" class="app-search-icon" alt="${app.name}">`;
             }
@@ -743,9 +916,8 @@ async function searchApps() {
         console.error(`Failed to load icon for ${app.name}:`, error);
       }
     });
-    
   } catch (error) {
-    console.error('Search error:', error);
+    console.error("Search error:", error);
     resultsDiv.innerHTML = `
       <div class="no-results">
         <span class="material-icons">error</span>
@@ -758,16 +930,16 @@ async function searchApps() {
 async function launchApp(appName, appPath) {
   try {
     addLog(`${appName} を起動中...`, "info");
-    
+
     const success = await window.windowAPI.launchAppByPath(appPath);
-    
+
     if (success) {
       addLog(`${appName} を起動しました`, "success");
-      
+
       // 検索結果をクリア
       document.getElementById("appSearchInput").value = "";
       document.getElementById("appSearchResults").innerHTML = "";
-      
+
       // 少し待ってからウィンドウリストを更新
       setTimeout(refreshWindowList, 2000);
     } else {
@@ -795,29 +967,376 @@ function debounce(func, wait) {
 async function resetLocalData() {
   const confirmed = confirm(
     "ローカルデータをすべて削除してオンボーディングに戻ります。\n\n" +
-    "以下のデータが削除されます:\n" + 
-    "• アプリケーション分析データ\n" +
-    "• オンボーディング完了状態\n\n" +
-    "続行しますか？"
+      "以下のデータが削除されます:\n" +
+      "• アプリケーション分析データ\n" +
+      "• オンボーディング完了状態\n\n" +
+      "続行しますか？"
   );
-  
+
   if (!confirmed) return;
-  
+
   try {
     addLog("ローカルデータを削除中...", "info");
-    
+
     // IPCでデータ削除を実行
     const result = await window.windowAPI.resetLocalData();
-    
+
     if (result) {
-      addLog("データを削除しました。アプリケーションを再起動しています...", "success");
+      addLog(
+        "データを削除しました。アプリケーションを再起動しています...",
+        "success"
+      );
       // アプリが自動的に再起動されるため、ここでは何もしない
     } else {
       addLog("データ削除に失敗しました", "error");
     }
   } catch (error) {
-    console.error('Reset data error:', error);
+    console.error("Reset data error:", error);
     addLog(`リセットエラー: ${error.message}`, "error");
+  }
+}
+
+// Preset Management Functions
+async function loadPresets() {
+  try {
+    const presets = await window.windowAPI.getPresets();
+    const presetList = document.getElementById("presetList");
+
+    if (presets.length === 0) {
+      presetList.innerHTML = `
+        <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">
+          <span class="material-icons" style="font-size: 48px;">bookmark_border</span>
+          <p>プリセットがありません</p>
+          <p style="font-size: 12px;">現在のウィンドウ配置を保存してください</p>
+        </div>
+      `;
+      return;
+    }
+
+    presetList.innerHTML = presets
+      .map((preset) => {
+        const date = new Date(preset.updatedAt);
+        const dateStr = `${
+          date.getMonth() + 1
+        }/${date.getDate()} ${date.getHours()}:${date
+          .getMinutes()
+          .toString()
+          .padStart(2, "0")}`;
+
+        return `
+        <div class="preset-item">
+          <div class="preset-info">
+            <div class="preset-name">${preset.name}</div>
+            <div class="preset-details">
+              ${preset.windows.length}個のウィンドウ • ${dateStr}
+              ${preset.description ? `<br>${preset.description}` : ""}
+            </div>
+          </div>
+          <div class="preset-actions">
+            <button class="preset-btn load" onclick="loadPreset('${
+              preset.id
+            }')">
+              <span class="material-icons" style="font-size: 14px;">play_arrow</span>
+              復元
+            </button>
+            <button class="preset-btn delete" onclick="deletePreset('${
+              preset.id
+            }')">
+              <span class="material-icons" style="font-size: 14px;">delete</span>
+            </button>
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+  } catch (error) {
+    console.error("Error loading presets:", error);
+    addLog(`プリセット読み込みエラー: ${error.message}`, "error");
+  }
+}
+
+// Robust loader with retry
+async function loadPresetsWithRetry(retries = 3, delayMs = 300) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await loadPresets();
+      const list = document.getElementById("presetList");
+      if (list && list.children.length > 0) return; // success
+    } catch (e) {
+      // ignore and retry
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  // last attempt (ensure UI message even if 0件)
+  await loadPresets();
+}
+
+async function savePreset() {
+  const nameInput = document.getElementById("presetNameInput");
+  const name = nameInput.value.trim();
+
+  if (!name) {
+    addLog("プリセット名を入力してください", "error");
+    return;
+  }
+
+  try {
+    const preset = await window.windowAPI.savePreset(name);
+    addLog(`プリセット "${preset.name}" を保存しました`, "success");
+    nameInput.value = "";
+    await loadPresets();
+  } catch (error) {
+    console.error("Error saving preset:", error);
+    addLog(`プリセット保存エラー: ${error.message}`, "error");
+  }
+}
+
+async function loadPreset(presetId) {
+  try {
+    addLog("プリセットを復元中...", "info");
+    const success = await window.windowAPI.loadPreset(presetId);
+
+    if (success) {
+      addLog("プリセットを復元しました", "success");
+      // ウィンドウリストを更新
+      setTimeout(() => {
+        refreshWindowList();
+      }, 1000);
+    } else {
+      addLog("プリセットの復元に失敗しました", "error");
+    }
+  } catch (error) {
+    console.error("Error loading preset:", error);
+    addLog(`プリセット復元エラー: ${error.message}`, "error");
+  }
+}
+
+async function deletePreset(presetId) {
+  if (!confirm("このプリセットを削除しますか？")) {
+    return;
+  }
+
+  try {
+    const success = await window.windowAPI.deletePreset(presetId);
+
+    if (success) {
+      addLog("プリセットを削除しました", "success");
+      await loadPresets();
+    } else {
+      addLog("プリセットの削除に失敗しました", "error");
+    }
+  } catch (error) {
+    console.error("Error deleting preset:", error);
+    addLog(`プリセット削除エラー: ${error.message}`, "error");
+  }
+}
+
+// Task-based App Suggestion Functions
+let selectedTaskApps = new Set();
+let taskSuggestions = null;
+
+async function suggestAppsForTask() {
+  const promptInput = document.getElementById("taskPromptInput");
+  const userPrompt = promptInput.value.trim();
+
+  if (!userPrompt) {
+    addLog("タスクを入力してください", "error");
+    return;
+  }
+
+  // ダイアログを開く
+  document.getElementById("taskAppDialog").style.display = "block";
+  document.getElementById("taskAppLoading").style.display = "block";
+  document.getElementById("taskAppContent").style.display = "none";
+
+  // タスク名を自動設定
+  document.getElementById("taskNameInput").value = userPrompt;
+
+  try {
+    // AIに提案を依頼
+    addLog(`タスク「${userPrompt}」に最適なアプリを分析中...`, "info");
+    taskSuggestions = await window.windowAPI.suggestAppsForTask(userPrompt);
+
+    // 選択されたアプリをリセット
+    selectedTaskApps.clear();
+
+    // 高確度アプリを追加（デフォルトでチェック済み）
+    taskSuggestions.highConfidence.forEach((app) => selectedTaskApps.add(app));
+
+    // UIを更新
+    displayTaskSuggestions();
+
+    document.getElementById("taskAppLoading").style.display = "none";
+    document.getElementById("taskAppContent").style.display = "block";
+  } catch (error) {
+    console.error("Error suggesting apps:", error);
+    addLog(`アプリ提案エラー: ${error.message}`, "error");
+    closeTaskAppDialog();
+  }
+}
+
+function displayTaskSuggestions() {
+  if (!taskSuggestions) return;
+
+  // 説明文を表示
+  document.getElementById("taskReasoningText").textContent =
+    taskSuggestions.reasoning;
+
+  // 高確度アプリを表示
+  const highDiv = document.getElementById("highConfidenceApps");
+  highDiv.innerHTML =
+    taskSuggestions.highConfidence
+      .map(
+        (app) => `
+    <label style="display: flex; align-items: center; padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 6px; margin-bottom: 6px; cursor: pointer;">
+      <input type="checkbox" 
+             value="${app}" 
+             ${selectedTaskApps.has(app) ? "checked" : ""} 
+             onchange="toggleTaskApp('${app}')"
+             style="margin-right: 8px;">
+      <span style="color: white;">${app}</span>
+    </label>
+  `
+      )
+      .join("") ||
+    '<p style="color: rgba(255, 255, 255, 0.5); padding: 8px;">推奨アプリなし</p>';
+
+  // 低確度アプリを表示
+  const lowDiv = document.getElementById("lowConfidenceApps");
+  lowDiv.innerHTML =
+    taskSuggestions.lowConfidence
+      .map(
+        (app) => `
+    <label style="display: flex; align-items: center; padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 6px; margin-bottom: 6px; cursor: pointer;">
+      <input type="checkbox" 
+             value="${app}" 
+             ${selectedTaskApps.has(app) ? "checked" : ""} 
+             onchange="toggleTaskApp('${app}')"
+             style="margin-right: 8px;">
+      <span style="color: white;">${app}</span>
+    </label>
+  `
+      )
+      .join("") ||
+    '<p style="color: rgba(255, 255, 255, 0.5); padding: 8px;">追加候補なし</p>';
+}
+
+function toggleTaskApp(appName) {
+  if (selectedTaskApps.has(appName)) {
+    selectedTaskApps.delete(appName);
+  } else {
+    selectedTaskApps.add(appName);
+  }
+}
+
+async function searchAdditionalApps() {
+  const searchInput = document.getElementById("additionalAppSearch");
+  const query = searchInput.value.trim();
+  const resultsDiv = document.getElementById("additionalAppResults");
+
+  if (!query) {
+    resultsDiv.innerHTML = "";
+    return;
+  }
+
+  try {
+    const apps = await window.windowAPI.searchApps(query);
+
+    if (apps.length === 0) {
+      resultsDiv.innerHTML =
+        '<p style="color: rgba(255, 255, 255, 0.5); padding: 8px;">見つかりません</p>';
+      return;
+    }
+
+    resultsDiv.innerHTML = apps
+      .slice(0, 5)
+      .map(
+        (app) => `
+      <label style="display: flex; align-items: center; padding: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; margin-bottom: 4px; cursor: pointer;">
+        <input type="checkbox" 
+               value="${app.name}" 
+               ${selectedTaskApps.has(app.name) ? "checked" : ""} 
+               onchange="toggleTaskApp('${app.name}')"
+               style="margin-right: 8px;">
+        <span style="color: white; font-size: 13px;">${app.name}</span>
+      </label>
+    `
+      )
+      .join("");
+  } catch (error) {
+    console.error("Search error:", error);
+    resultsDiv.innerHTML =
+      '<p style="color: #ff6b6b; padding: 8px;">検索エラー</p>';
+  }
+}
+
+function closeTaskAppDialog() {
+  document.getElementById("taskAppDialog").style.display = "none";
+  document.getElementById("taskPromptInput").value = "";
+  document.getElementById("additionalAppSearch").value = "";
+  document.getElementById("additionalAppResults").innerHTML = "";
+  selectedTaskApps.clear();
+  taskSuggestions = null;
+}
+
+async function confirmTaskApps() {
+  const taskName =
+    document.getElementById("taskNameInput").value.trim() ||
+    document.getElementById("taskPromptInput").value.trim();
+
+  if (selectedTaskApps.size === 0) {
+    addLog("アプリを選択してください", "error");
+    return;
+  }
+
+  const appNames = Array.from(selectedTaskApps);
+
+  try {
+    addLog(`${appNames.length}個のアプリを起動中...`, "info");
+
+    // アプリを開いてプリセットとして保存
+    const preset = await window.windowAPI.openAppsForTask(appNames, taskName);
+
+    addLog(
+      `タスク「${taskName}」のアプリを起動し、プリセットとして保存しました`,
+      "success"
+    );
+
+    // プリセット一覧を更新
+    await loadPresets();
+
+    // ウィンドウリストを更新
+    setTimeout(() => {
+      refreshWindowList();
+    }, 3000);
+
+    closeTaskAppDialog();
+  } catch (error) {
+    console.error("Error opening apps:", error);
+    addLog(`アプリ起動エラー: ${error.message}`, "error");
+  }
+}
+
+// Auto refresh functions
+function startAutoRefresh() {
+  // 即座に一度更新
+  refreshWindowList();
+  refreshCpuInfo();
+
+  // 5秒ごとに自動更新
+  autoRefreshInterval = setInterval(() => {
+    refreshWindowList();
+    refreshCpuInfo();
+  }, 5000);
+
+  addLog("自動更新を開始しました（5秒間隔）", "info");
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+    addLog("自動更新を停止しました", "info");
   }
 }
 
@@ -828,3 +1347,28 @@ window.showAppInfo = showAppInfo;
 window.closeAppInfoModal = closeAppInfoModal;
 window.launchApp = launchApp;
 window.resetLocalData = resetLocalData;
+window.loadPreset = loadPreset;
+window.deletePreset = deletePreset;
+window.toggleTaskApp = toggleTaskApp;
+window.searchAdditionalApps = searchAdditionalApps;
+window.closeTaskAppDialog = closeTaskAppDialog;
+window.confirmTaskApps = confirmTaskApps;
+window.closeSavePresetDialog = function () {
+  document.getElementById("savePresetDialog").style.display = "none";
+};
+window.confirmSavePresetFromDialog = async function () {
+  const name = document.getElementById("savePresetNameInput").value.trim();
+  if (!name) {
+    addLog("プリセット名を入力してください", "error");
+    return;
+  }
+  try {
+    const preset = await window.windowAPI.savePreset(name);
+    addLog(`プリセット "${preset.name}" を保存しました`, "success");
+    document.getElementById("savePresetDialog").style.display = "none";
+    await loadPresets();
+  } catch (error) {
+    console.error("Error saving preset:", error);
+    addLog(`プリセット保存エラー: ${error.message}`, "error");
+  }
+};

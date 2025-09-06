@@ -345,4 +345,101 @@ Please analyze and provide window management actions.`;
 
     return actions;
   }
+
+  async suggestAppsForTask(userPrompt: string, applicationGraph: any[]): Promise<{
+    highConfidence: string[];
+    lowConfidence: string[];
+    reasoning: string;
+  }> {
+    const systemPrompt = `
+あなたはユーザーのタスクから必要なアプリケーションを推薦するエキスパートです。
+
+ユーザーのプロンプトと、利用可能なアプリケーションのリストを分析して、
+タスクに最適なアプリケーションを提案してください。
+
+アプリケーションは以下の2つのカテゴリーに分類してください：
+- highConfidence: タスクに確実に必要と思われるアプリ（デフォルトでチェック済み）
+- lowConfidence: あった方が良いかもしれないアプリ（デフォルトでチェックなし）
+
+判断基準：
+1. タスクとの直接的な関連性
+2. アプリケーションの主要な用途
+3. 一般的なワークフローでの組み合わせ
+4. アプリケーションの説明（observations）との合致度
+
+返答は構造化されたJSONのみで、説明は不要です。
+`;
+
+    const userMessage = `
+タスク: ${userPrompt}
+
+利用可能なアプリケーション:
+${JSON.stringify(applicationGraph, null, 2)}
+`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1000,
+        temperature: 0.3,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ],
+        tools: [
+          {
+            name: "suggest_apps",
+            description: "Suggest applications for the user's task",
+            input_schema: {
+              type: "object",
+              properties: {
+                highConfidence: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Apps that are definitely needed for the task",
+                },
+                lowConfidence: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Apps that might be helpful for the task",
+                },
+                reasoning: {
+                  type: "string",
+                  description: "Brief explanation of the suggestions",
+                },
+              },
+              required: ["highConfidence", "lowConfidence", "reasoning"],
+            },
+          },
+        ],
+        tool_choice: { type: "tool", name: "suggest_apps" },
+      });
+
+      const toolUse = response.content.find(
+        (content): content is any =>
+          content.type === "tool_use" && content.name === "suggest_apps"
+      );
+
+      if (!toolUse) {
+        console.warn("No tool use in response, using fallback");
+        return {
+          highConfidence: [],
+          lowConfidence: [],
+          reasoning: "Could not determine relevant applications",
+        };
+      }
+
+      return toolUse.input as {
+        highConfidence: string[];
+        lowConfidence: string[];
+        reasoning: string;
+      };
+    } catch (error) {
+      console.error("Error suggesting apps:", error);
+      throw error;
+    }
+  }
 }

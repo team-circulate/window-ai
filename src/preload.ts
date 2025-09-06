@@ -74,6 +74,40 @@ contextBridge.exposeInMainWorld("windowAPI", {
   resetLocalData: (): Promise<boolean> => {
     return ipcRenderer.invoke("reset-local-data");
   },
+
+  // Preset management
+  savePreset: (name: string, description?: string): Promise<any> => {
+    return ipcRenderer.invoke("save-preset", name, description);
+  },
+
+  getPresets: (): Promise<any[]> => {
+    return ipcRenderer.invoke("get-presets");
+  },
+
+  loadPreset: (presetId: string): Promise<boolean> => {
+    return ipcRenderer.invoke("load-preset", presetId);
+  },
+
+  deletePreset: (presetId: string): Promise<boolean> => {
+    return ipcRenderer.invoke("delete-preset", presetId);
+  },
+
+  updatePreset: (presetId: string, name?: string, description?: string): Promise<any> => {
+    return ipcRenderer.invoke("update-preset", presetId, name, description);
+  },
+
+  // Task-based app suggestions
+  suggestAppsForTask: (userPrompt: string): Promise<{
+    highConfidence: string[];
+    lowConfidence: string[];
+    reasoning: string;
+  }> => {
+    return ipcRenderer.invoke("suggest-apps-for-task", userPrompt);
+  },
+
+  openAppsForTask: (appNames: string[], taskName: string): Promise<any> => {
+    return ipcRenderer.invoke("open-apps-for-task", appNames, taskName);
+  },
 });
 
 declare global {
@@ -97,6 +131,17 @@ declare global {
       checkOnboarding: () => Promise<boolean>;
       checkNewApps: () => Promise<{newAppsFound: boolean, apps: string[]}>;
       resetLocalData: () => Promise<boolean>;
+      savePreset: (name: string, description?: string) => Promise<any>;
+      getPresets: () => Promise<any[]>;
+      loadPreset: (presetId: string) => Promise<boolean>;
+      deletePreset: (presetId: string) => Promise<boolean>;
+      updatePreset: (presetId: string, name?: string, description?: string) => Promise<any>;
+      suggestAppsForTask: (userPrompt: string) => Promise<{
+        highConfidence: string[];
+        lowConfidence: string[];
+        reasoning: string;
+      }>;
+      openAppsForTask: (appNames: string[], taskName: string) => Promise<any>;
     };
   }
 }

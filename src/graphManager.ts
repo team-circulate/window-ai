@@ -178,6 +178,18 @@ export class GraphManager {
     return [...this.graph];
   }
 
+  public getAllApplications(): Array<{name: string, observations: string[]}> {
+    return this.graph
+      .filter((node): node is EntityNode => 
+        node.type === 'entity' && 
+        node.entityType === 'Application'
+      )
+      .map(app => ({
+        name: app.name,
+        observations: app.observations
+      }));
+  }
+
   /**
    * すべてのデータをクリア（リセット機能用）
    */

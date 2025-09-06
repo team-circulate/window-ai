@@ -95,43 +95,63 @@
       }
 
       .input-section {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
-        padding: 20px;
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        border-radius: 16px;
+        padding: 22px;
         margin-bottom: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
       }
 
       .input-group {
         display: flex;
-        gap: 10px;
+        gap: 0;
+        align-items: stretch;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 12px;
+        overflow: hidden;
       }
 
-      #userIntent {
+      /* input-group 内のデフォルト入力スタイル */
+      .input-group input {
         flex: 1;
-        padding: 12px 16px;
-        background: rgba(255, 255, 255, 0.9);
-        color: #333;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.92);
+        color: #1f2937;
         border: none;
-        border-radius: 8px;
         font-size: 14px;
         outline: none;
       }
 
-      #userIntent::placeholder {
-        color: #999;
+      #userIntent,
+      #taskPromptInput {
+        flex: 1;
+        padding: 14px 16px;
+        padding-left: 60px;
+        background: rgba(255, 255, 255, 0.92);
+        color: #1f2937;
+        border: none;
+        font-size: 14px;
+        outline: none;
+      }
+
+      #userIntent::placeholder,
+      #taskPromptInput::placeholder {
+        color: #6b7280;
       }
 
       button {
-        padding: 12px 24px;
+        padding: 12px 18px;
         background: white;
-        color: #667eea;
+        color: #4f46e5;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: all 0.25s ease;
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -142,8 +162,8 @@
       }
 
       button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        transform: translateY(-1px);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
       }
 
       button:disabled {
@@ -157,6 +177,85 @@
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 10px;
         margin-top: 15px;
+      }
+
+      /* ヒーロー検索の一体型ボタン */
+      .inline-action-btn {
+        background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+        color: white;
+        border-radius: 0 12px 12px 0;
+        border-left: 1px solid rgba(255, 255, 255, 0.25);
+        padding: 0 18px;
+        min-width: 120px;
+        position: relative;
+        z-index: 2;
+        pointer-events: auto;
+      }
+
+      .inline-action-btn:hover {
+        filter: brightness(1.05);
+      }
+
+      .inline-success-btn {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        color: white;
+        border-radius: 0 12px 12px 0;
+        border-left: 1px solid rgba(255, 255, 255, 0.25);
+        padding: 0 18px;
+        min-width: 110px;
+        position: relative;
+        z-index: 2;
+        pointer-events: auto;
+      }
+
+      .inline-success-btn:hover {
+        filter: brightness(1.05);
+      }
+
+      .inline-action-btn--middle {
+        border-radius: 0;
+        border-right: 1px solid rgba(255, 255, 255, 0.25);
+      }
+
+      .inline-secondary-btn {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border-left: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 0 12px 12px 0;
+        padding: 0 14px;
+        min-width: 96px;
+      }
+
+      .inline-secondary-btn:hover {
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      /* 入力内アイコン */
+      .input-with-icon {
+        position: relative;
+        flex: 1;
+        display: flex;
+      }
+
+      .input-with-icon .material-icons {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6b7280;
+        font-size: 22px;
+        width: 24px;
+        text-align: center;
+        pointer-events: none;
+      }
+
+      .input-with-icon input {
+        padding-left: 60px;
+      }
+
+      /* プリセット名の入力にもアイコン余白を適用 */
+      #presetNameInput {
+        padding-left: 60px;
       }
 
       .quick-action {
@@ -194,6 +293,13 @@
         display: flex;
         align-items: center;
         gap: 8px;
+      }
+
+      .section-subtitle {
+        margin-top: -6px;
+        margin-bottom: 12px;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 12px;
       }
 
       .status-indicator {
@@ -316,7 +422,11 @@
       .app-search-icon-placeholder {
         width: 36px;
         height: 36px;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+        background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.3),
+          rgba(255, 255, 255, 0.1)
+        );
         border-radius: 8px;
         display: flex;
         align-items: center;
@@ -654,70 +764,160 @@
         font-style: italic;
         line-height: 1.3;
       }
+
+      /* プリセット関連のスタイル */
+      .preset-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px;
+        margin-bottom: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        transition: all 0.2s;
+      }
+
+      .preset-item:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+
+      .preset-info {
+        flex: 1;
+      }
+
+      .preset-name {
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+
+      .preset-details {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .preset-actions {
+        display: flex;
+        gap: 5px;
+      }
+
+      .preset-btn {
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 6px;
+        color: white;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.2s;
+      }
+
+      .preset-btn:hover {
+        background: rgba(255, 255, 255, 0.25);
+      }
+
+      .preset-btn.load {
+        background: rgba(33, 150, 243, 0.3);
+        border-color: rgba(33, 150, 243, 0.5);
+      }
+
+      .preset-btn.load:hover {
+        background: rgba(33, 150, 243, 0.5);
+      }
+
+      .preset-btn.delete {
+        background: rgba(244, 67, 54, 0.3);
+        border-color: rgba(244, 67, 54, 0.5);
+      }
+
+      .preset-btn.delete:hover {
+        background: rgba(244, 67, 54, 0.5);
+      }
     </style>
   </head>
   <body>
-    <button class="reset-button" onclick="resetLocalData()" title="データをリセット">
+    <button
+      class="reset-button"
+      onclick="resetLocalData()"
+      title="データをリセット"
+    >
       <span class="material-icons">delete_forever</span>
       リセット
     </button>
-    
+
     <div class="header">
       <h1><span class="material-icons">window</span> Window AI Manager</h1>
       <p>AIがウィンドウ配置を最適化します</p>
     </div>
 
     <div class="main-content">
-      <!-- App Launcher Section -->
-      <div class="input-section" style="margin-bottom: 20px;">
-        <div class="status-title" style="margin-bottom: 15px;">
-          <span class="material-icons" style="font-size: 18px;">rocket_launch</span>
-          アプリケーション起動
+      <!-- Task-based App Launcher (Refined UI) -->
+      <div class="input-section" style="margin-bottom: 20px">
+        <div class="status-title" style="margin-bottom: 15px">
+          <span class="material-icons" style="font-size: 18px"
+            >auto_awesome</span
+          >
+          タスクから最適なアプリを起動
         </div>
         <div class="input-group">
-          <input
-            type="text"
-            id="appSearchInput"
-            placeholder="アプリケーション名を入力 (例: Safari, Slack)"
-            autocomplete="off"
-          />
-          <button id="searchAppsBtn">
-            <span class="material-icons">search</span> 検索
+          <div class="input-with-icon">
+            <span class="material-icons">search</span>
+            <input
+              type="text"
+              id="taskPromptInput"
+              placeholder="やりたいことを入力 (例: ウェブ開発する、動画編集する)"
+              autocomplete="off"
+            />
+          </div>
+          <button
+            id="suggestAppsBtn"
+            class="inline-action-btn"
+            type="button"
+            onclick="suggestAppsForTask()"
+          >
+            <span class="material-icons">auto_fix_high</span> 提案
           </button>
-        </div>
-        <div id="appSearchResults" style="margin-top: 15px; max-height: 300px; overflow-y: auto;">
-          <!-- Search results will appear here -->
         </div>
       </div>
 
       <div class="input-section">
+        <div class="status-title" style="margin-bottom: 10px">
+          <span class="material-icons" style="font-size: 18px"
+            >dashboard_customize</span
+          >
+          ウィンドウ配置アシスト
+        </div>
+        <p class="section-subtitle">
+          テキストでレイアウト指示 → AIが配置・移動・サイズ変更
+        </p>
         <div class="input-group">
-          <input
-            type="text"
-            id="userIntent"
-            placeholder="例: Safariを左側、VSCodeを右側に配置して"
-          />
-          <button id="analyzeBtn">
+          <div class="input-with-icon">
+            <span class="material-icons">edit_note</span>
+            <input
+              type="text"
+              id="userIntent"
+              placeholder="例: Safariを左側、VSCodeを右側に配置して"
+            />
+          </div>
+          <button id="analyzeBtn" class="inline-action-btn">
             <span class="material-icons">auto_fix_high</span> 分析・実行
-          </button>
-          <button id="refreshBtn">
-            <span class="material-icons">refresh</span> 更新
           </button>
         </div>
 
-        <!-- すべてのアプリを閉じるボタン -->
-        <div style="margin-top: 15px">
-          <button
-            id="closeAllAppsBtn"
-            style="
-              background: rgba(244, 67, 54, 0.8);
-              width: 100%;
-              color: white;
-            "
-          >
-            <span class="material-icons">close</span>
-            すべてのアプリケーションを終了
-          </button>
+        <!-- すべてのアプリを閉じるボタンは削除 -->
+
+        <!-- プリセット機能 -->
+        <div class="preset-section" style="margin-top: 20px">
+          <div class="status-title" style="margin-bottom: 15px">
+            <span class="material-icons" style="font-size: 18px">bookmark</span>
+            ウィンドウ配置プリセット
+          </div>
+
+          <!-- プリセット保存行は削除。保存トリガーは「現在のウィンドウ」見出し側に配置 -->
+
+          <!-- プリセット一覧 -->
+          <div id="presetList" style="max-height: 200px; overflow-y: auto">
+            <!-- プリセットアイテムがここに表示されます -->
+          </div>
         </div>
 
         <!-- ウィンドウ配置アクションは一時的にコメントアウト -->
@@ -769,6 +969,104 @@
             >desktop_windows</span
           >
           現在のウィンドウ
+          <div
+            style="
+              margin-left: auto;
+              display: flex;
+              gap: 8px;
+              align-items: center;
+            "
+          >
+            <button
+              id="selectAllWindowsBtn"
+              class="preset-btn"
+              style="padding: 6px 10px"
+            >
+              全選択
+            </button>
+            <button
+              id="openSavePresetDialogBtn"
+              class="preset-btn load"
+              style="padding: 6px 10px"
+            >
+              <span class="material-icons" style="font-size: 16px"
+                >bookmark_add</span
+              >
+              保存
+            </button>
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                font-size: 12px;
+                gap: 4px;
+              "
+            >
+              <input
+                type="checkbox"
+                id="autoRefreshCheckbox"
+                style="cursor: pointer"
+              />
+              <span>自動更新</span>
+            </label>
+            <button
+              id="windowRefreshBtn"
+              style="
+                padding: 4px 8px;
+                font-size: 11px;
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.25);
+                border-radius: 4px;
+                color: white;
+                cursor: pointer;
+              "
+            >
+              <span
+                class="material-icons"
+                style="font-size: 14px; vertical-align: middle"
+                >refresh</span
+              >
+              更新
+            </button>
+          </div>
+        </div>
+        <!-- Bulk action bar (hidden when no selection) -->
+        <div
+          id="bulkActionBar"
+          style="
+            display: none;
+            margin: 8px 0 12px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+          "
+        >
+          <span id="bulkCountText" style="font-size: 13px"
+            >0個のウィンドウ</span
+          >
+          <div style="margin-left: auto; display: flex; gap: 8px">
+            <button
+              id="bulkCloseBtn"
+              class="window-ctrl-btn close"
+              title="閉じる"
+            >
+              <span class="material-icons">close</span> 閉じる
+            </button>
+            <button
+              id="bulkMinimizeBtn"
+              class="window-ctrl-btn minimize"
+              title="最小化"
+            >
+              <span class="material-icons">minimize</span> 最小化
+            </button>
+            <button id="bulkQuitBtn" class="window-ctrl-btn quit" title="終了">
+              <span class="material-icons">power_settings_new</span> 終了
+            </button>
+          </div>
         </div>
         <div class="window-list" id="windowList">
           <!-- Windows will be populated here -->
@@ -783,41 +1081,59 @@
     </div>
 
     <!-- App Info Modal -->
-    <div id="appInfoModal" style="
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 999;
-      backdrop-filter: blur(3px);
-    ">
-      <div style="
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 12px;
-        padding: 20px;
-        min-width: 350px;
-        max-width: 500px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-      ">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-          <h3 id="appInfoTitle" style="margin: 0; font-size: 18px; font-weight: 600;"></h3>
-          <button onclick="closeAppInfoModal()" style="
-            background: transparent;
-            border: none;
-            color: white;
-            cursor: pointer;
-            padding: 4px;
+    <div
+      id="appInfoModal"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        backdrop-filter: blur(3px);
+      "
+    >
+      <div
+        style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 12px;
+          padding: 20px;
+          min-width: 350px;
+          max-width: 500px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        "
+      >
+        <div
+          style="
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
-          ">
+            margin-bottom: 15px;
+          "
+        >
+          <h3
+            id="appInfoTitle"
+            style="margin: 0; font-size: 18px; font-weight: 600"
+          ></h3>
+          <button
+            onclick="closeAppInfoModal()"
+            style="
+              background: transparent;
+              border: none;
+              color: white;
+              cursor: pointer;
+              padding: 4px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            "
+          >
             <span class="material-icons">close</span>
           </button>
         </div>
@@ -886,6 +1202,362 @@
           >
             <span class="material-icons">check_circle</span> 閉じる
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task App Suggestion Dialog -->
+    <!-- Save Preset Dialog -->
+    <div
+      id="savePresetDialog"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1500;
+        backdrop-filter: blur(6px);
+      "
+    >
+      <div
+        style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(135deg, #1f2937 0%, #0f172a 100%);
+          border-radius: 14px;
+          padding: 20px;
+          min-width: 420px;
+          max-width: 520px;
+          border: 1px solid rgba(255, 255, 255, 0.15);
+        "
+      >
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+          "
+        >
+          <h3
+            style="margin: 0; font-size: 16px; font-weight: 600; color: white"
+          >
+            <span
+              class="material-icons"
+              style="
+                font-size: 18px;
+                vertical-align: middle;
+                margin-right: 6px;
+                color: #22c55e;
+              "
+              >bookmark_add</span
+            >
+            プリセットとして保存
+          </h3>
+          <button
+            onclick="closeSavePresetDialog()"
+            style="
+              background: none;
+              border: none;
+              color: rgba(255, 255, 255, 0.8);
+              cursor: pointer;
+            "
+          >
+            <span class="material-icons">close</span>
+          </button>
+        </div>
+        <div class="input-group">
+          <div class="input-with-icon" style="flex: 1">
+            <span class="material-icons">edit</span>
+            <input
+              id="savePresetNameInput"
+              type="text"
+              placeholder="プリセット名"
+              autocomplete="off"
+            />
+          </div>
+          <button
+            class="inline-success-btn"
+            type="button"
+            onclick="confirmSavePresetFromDialog()"
+          >
+            <span class="material-icons">save</span> 保存
+          </button>
+        </div>
+      </div>
+    </div>
+    <div
+      id="taskAppDialog"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 2000;
+        backdrop-filter: blur(8px);
+      "
+    >
+      <div
+        style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+          border-radius: 16px;
+          padding: 24px;
+          min-width: 500px;
+          max-width: 700px;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        "
+      >
+        <!-- Header -->
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+          "
+        >
+          <h2
+            style="margin: 0; font-size: 20px; font-weight: 600; color: white"
+          >
+            <span
+              class="material-icons"
+              style="vertical-align: middle; margin-right: 8px; color: #a78bfa"
+              >auto_awesome</span
+            >
+            タスクに最適なアプリを選択
+          </h2>
+          <button
+            onclick="closeTaskAppDialog()"
+            style="
+              background: none;
+              border: none;
+              color: rgba(255, 255, 255, 0.6);
+              cursor: pointer;
+              padding: 4px;
+            "
+          >
+            <span class="material-icons">close</span>
+          </button>
+        </div>
+
+        <!-- Task Name Input -->
+        <div style="margin-bottom: 20px">
+          <label
+            style="
+              display: block;
+              margin-bottom: 8px;
+              color: rgba(255, 255, 255, 0.9);
+              font-size: 14px;
+            "
+          >
+            タスク名（プリセット名として保存されます）
+          </label>
+          <input
+            type="text"
+            id="taskNameInput"
+            style="
+              width: 100%;
+              padding: 10px;
+              background: rgba(255, 255, 255, 0.1);
+              border: 1px solid rgba(255, 255, 255, 0.2);
+              border-radius: 8px;
+              color: white;
+            "
+            placeholder="例: ウェブ開発"
+          />
+        </div>
+
+        <!-- Loading State -->
+        <div
+          id="taskAppLoading"
+          style="display: none; text-align: center; padding: 40px"
+        >
+          <div class="spinner" style="margin: 0 auto 16px"></div>
+          <p style="color: rgba(255, 255, 255, 0.8)">最適なアプリを分析中...</p>
+        </div>
+
+        <!-- App Selection List -->
+        <div id="taskAppContent" style="display: none">
+          <div style="margin-bottom: 16px">
+            <p
+              id="taskReasoningText"
+              style="
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 14px;
+                margin-bottom: 16px;
+                padding: 12px;
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                border-left: 3px solid #a78bfa;
+              "
+            ></p>
+          </div>
+
+          <!-- High Confidence Apps -->
+          <div style="margin-bottom: 16px">
+            <h3
+              style="
+                font-size: 14px;
+                font-weight: 600;
+                color: rgba(255, 255, 255, 0.9);
+                margin-bottom: 8px;
+              "
+            >
+              <span
+                class="material-icons"
+                style="font-size: 16px; vertical-align: middle; color: #4ade80"
+                >check_circle</span
+              >
+              推奨アプリ
+            </h3>
+            <div
+              id="highConfidenceApps"
+              style="max-height: 160px; overflow-y: auto; padding: 4px"
+            >
+              <!-- High confidence apps will be inserted here -->
+            </div>
+          </div>
+
+          <!-- Low Confidence Apps -->
+          <div style="margin-bottom: 16px">
+            <h3
+              style="
+                font-size: 14px;
+                font-weight: 600;
+                color: rgba(255, 255, 255, 0.9);
+                margin-bottom: 8px;
+              "
+            >
+              <span
+                class="material-icons"
+                style="font-size: 16px; vertical-align: middle; color: #fbbf24"
+                >help_outline</span
+              >
+              追加候補
+            </h3>
+            <div
+              id="lowConfidenceApps"
+              style="max-height: 120px; overflow-y: auto; padding: 4px"
+            >
+              <!-- Low confidence apps will be inserted here -->
+            </div>
+          </div>
+
+          <!-- Search Additional Apps -->
+          <div style="margin-bottom: 16px">
+            <h3
+              style="
+                font-size: 14px;
+                font-weight: 600;
+                color: rgba(255, 255, 255, 0.9);
+                margin-bottom: 8px;
+              "
+            >
+              <span
+                class="material-icons"
+                style="font-size: 16px; vertical-align: middle"
+                >add_circle</span
+              >
+              アプリを追加
+            </h3>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px">
+              <input
+                type="text"
+                id="additionalAppSearch"
+                placeholder="アプリ名を検索"
+                style="
+                  flex: 1;
+                  padding: 8px;
+                  background: rgba(255, 255, 255, 0.1);
+                  border: 1px solid rgba(255, 255, 255, 0.2);
+                  border-radius: 6px;
+                  color: white;
+                  font-size: 14px;
+                "
+              />
+              <button
+                onclick="searchAdditionalApps()"
+                style="
+                  padding: 8px 16px;
+                  background: rgba(255, 255, 255, 0.15);
+                  border: 1px solid rgba(255, 255, 255, 0.25);
+                  border-radius: 6px;
+                  color: white;
+                  cursor: pointer;
+                "
+              >
+                <span
+                  class="material-icons"
+                  style="font-size: 16px; vertical-align: middle"
+                  >search</span
+                >
+              </button>
+            </div>
+            <div
+              id="additionalAppResults"
+              style="max-height: 80px; overflow-y: auto; padding: 4px"
+            >
+              <!-- Search results will appear here -->
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="display: flex; gap: 12px; justify-content: flex-end">
+            <button
+              onclick="closeTaskAppDialog()"
+              style="
+                padding: 10px 20px;
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                color: white;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+              "
+            >
+              キャンセル
+            </button>
+            <button
+              onclick="confirmTaskApps()"
+              style="
+                padding: 10px 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border: none;
+                border-radius: 8px;
+                color: white;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+              "
+            >
+              <span
+                class="material-icons"
+                style="
+                  font-size: 16px;
+                  vertical-align: middle;
+                  margin-right: 4px;
+                "
+                >rocket_launch</span
+              >
+              選択したアプリを起動
+            </button>
+          </div>
         </div>
       </div>
     </div>

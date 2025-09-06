@@ -12,6 +12,7 @@ import { ClaudeService } from "./claudeService";
 import { AppScanner } from "./appScanner";
 import { GraphManager } from "./graphManager";
 import { IconExtractor } from "./iconExtractor";
+import { PresetManager } from "./presetManager";
 import { WindowState, WindowAction } from "./types";
 
 let mainWindow: BrowserWindow | null = null;
@@ -20,6 +21,7 @@ let claudeService: ClaudeService;
 let appScanner: AppScanner;
 let graphManager: GraphManager;
 let iconExtractor: IconExtractor;
+let presetManager: PresetManager;
 
 async function createWindow(loadOnboarding: boolean = false) {
   mainWindow = new BrowserWindow({
@@ -100,6 +102,7 @@ app.whenReady().then(async () => {
   appScanner = new AppScanner();
   graphManager = new GraphManager();
   iconExtractor = new IconExtractor();
+  presetManager = new PresetManager();
 
   // アプリ起動時にアイコンをプリロード（バックグラウンド）
   appScanner.getAllInstalledApps().then(apps => {
@@ -359,6 +362,158 @@ app.whenReady().then(async () => {
       console.error("Error resetting local data:", error);
       return false;
     }
+  });
+
+  // プリセット関連のIPCハンドラー
+  ipcMain.handle("save-preset", async (_, name: string, description?: string) => {
+    const windowState = await windowManager.getWindowState();
+    const windows = windowState.windows.map(w => ({
+      appName: w.appName,
+      position: {
+        x: w.bounds.x,
+        y: w.bounds.y
+      },
+      size: {
+        width: w.bounds.width,
+        height: w.bounds.height
+      }
+    }));
+    
+    const preset = presetManager.createPreset(name, description, windows);
+    console.log(`Preset saved: ${preset.name} with ${windows.length} windows`);
+    return preset;
+  });
+
+  ipcMain.handle("get-presets", async () => {
+    return presetManager.getAllPresets();
+  });
+
+  ipcMain.handle("load-preset", async (_, presetId: string) => {
+    const preset = presetManager.getPreset(presetId);
+    if (!preset) {
+      console.error(`Preset not found: ${presetId}`);
+      return false;
+    }
+
+    console.log(`Loading preset: ${preset.name} with ${preset.windows.length} windows`);
+    
+    // 現在開いているウィンドウを全て最小化（並列処理）
+    const currentState = await windowManager.getWindowState();
+    const minimizePromises = currentState.windows.map(window => 
+      windowManager.executeAction({
+        type: 'minimize',
+        targetWindow: window.appName,
+        reasoning: 'Minimizing current windows to load preset'
+      })
+    );
+    await Promise.all(minimizePromises);
+
+    // プリセットのウィンドウを復元（アプリ起動は並列、配置は順次）
+    // まず全アプリを並列で起動
+    const launchPromises = preset.windows.map(windowPreset => 
+      appScanner.launchApp(windowPreset.appName)
+    );
+    await Promise.all(launchPromises);
+    
+    // アプリが起動するまで少し待機（1回だけ）
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // ウィンドウの配置とサイズ調整を並列実行
+    const restorePromises = preset.windows.map(async windowPreset => {
+      // 移動とリサイズを並列実行
+      const actions = [
+        windowManager.executeAction({
+          type: 'move',
+          targetWindow: windowPreset.appName,
+          parameters: {
+            position: windowPreset.position
+          },
+          reasoning: 'Restoring window position from preset'
+        }),
+        windowManager.executeAction({
+          type: 'resize',
+          targetWindow: windowPreset.appName,
+          parameters: {
+            size: windowPreset.size
+          },
+          reasoning: 'Restoring window size from preset'
+        })
+      ];
+      
+      return Promise.all(actions);
+    });
+    
+    await Promise.all(restorePromises);
+
+    return true;
+  });
+
+  ipcMain.handle("delete-preset", async (_, presetId: string) => {
+    const deleted = presetManager.deletePreset(presetId);
+    console.log(`Preset ${presetId} deletion: ${deleted ? 'success' : 'failed'}`);
+    return deleted;
+  });
+
+  ipcMain.handle("update-preset", async (_, presetId: string, name?: string, description?: string) => {
+    const updates: any = {};
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+    
+    const updated = presetManager.updatePreset(presetId, updates);
+    console.log(`Preset ${presetId} update: ${updated ? 'success' : 'failed'}`);
+    return updated;
+  });
+
+  // アプリ提案機能
+  ipcMain.handle("suggest-apps-for-task", async (_, userPrompt: string) => {
+    console.log(`Suggesting apps for task: ${userPrompt}`);
+    
+    // application_graphを取得
+    const applicationGraph = graphManager.getAllApplications();
+    
+    // Claudeでアプリを提案
+    const suggestions = await claudeService.suggestAppsForTask(userPrompt, applicationGraph);
+    console.log(`Suggested apps - High: ${suggestions.highConfidence.length}, Low: ${suggestions.lowConfidence.length}`);
+    
+    return suggestions;
+  });
+
+  // タスクからアプリを開いてプリセット保存
+  ipcMain.handle("open-apps-for-task", async (_, appNames: string[], taskName: string) => {
+    console.log(`Opening ${appNames.length} apps for task: ${taskName}`);
+    
+    // 選択されたアプリを並列で開く
+    const launchPromises = appNames.map(appName => appScanner.launchApp(appName));
+    await Promise.all(launchPromises);
+    
+    // アプリが起動するまで待機
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // 現在のウィンドウ状態を取得してプリセットとして保存
+    const windowState = await windowManager.getWindowState();
+    const windows = windowState.windows
+      .filter(w => appNames.includes(w.appName))
+      .map(w => ({
+        appName: w.appName,
+        position: {
+          x: w.bounds.x,
+          y: w.bounds.y
+        },
+        size: {
+          width: w.bounds.width,
+          height: w.bounds.height
+        }
+      }));
+    
+    // タスク名でプリセットを保存
+    const preset = presetManager.createPreset(
+      taskName,
+      `自動生成: ${appNames.join(', ')}`,
+      windows
+    );
+    
+    console.log(`Auto-saved preset: ${preset.name} with ${windows.length} windows`);
+    return preset;
   });
 });
 
