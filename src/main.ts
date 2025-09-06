@@ -1097,6 +1097,11 @@ app.whenReady().then(async () => {
 
     await Promise.all(restorePromises);
 
+    // 実行日時を更新
+    presetManager.updatePreset(presetId, {
+      lastExecutedAt: new Date().toISOString(),
+    });
+
     return true;
   });
 

@@ -21,6 +21,8 @@ export interface Preset {
   windows: WindowPreset[];
   createdAt: string;
   updatedAt: string;
+  // 最後に実行（復元）された日時。存在しない場合は未実行。
+  lastExecutedAt?: string;
 }
 
 export class PresetManager {
@@ -111,10 +113,11 @@ export class PresetManager {
   }
 
   public getAllPresets(): Preset[] {
-    return Array.from(this.presets.values()).sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    return Array.from(this.presets.values()).sort((a, b) => {
+      const aTime = new Date(a.lastExecutedAt || a.updatedAt).getTime();
+      const bTime = new Date(b.lastExecutedAt || b.updatedAt).getTime();
+      return bTime - aTime;
+    });
   }
 
   public clearAllPresets(): void {

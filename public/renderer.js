@@ -2,6 +2,21 @@ let currentWindows = [];
 let iconCache = {}; // アイコンのキャッシュ
 let autoRefreshInterval = null;
 let selectedWindowIds = new Set();
+let latestPresets = [];
+let pendingRestorePresetId = null;
+let selectedAppsToCloseForRestore = new Set();
+
+// このアプリ自身を識別して常に閉じないようにする
+function isSelfApp(appName) {
+  if (!appName) return false;
+  const n = String(appName).toLowerCase();
+  return (
+    n === "window ai manager" ||
+    n === "window ai" ||
+    n === "window-ai" ||
+    n === "windowai"
+  );
+}
 
 // Initialize
 document.addEventListener("DOMContentLoaded", async () => {
@@ -1137,6 +1152,7 @@ async function resetLocalData() {
 async function loadPresets() {
   try {
     const presets = await window.windowAPI.getPresets();
+    latestPresets = presets;
     const presetList = document.getElementById("presetList");
 
     if (presets.length === 0) {
@@ -1152,10 +1168,10 @@ async function loadPresets() {
 
     presetList.innerHTML = presets
       .map((preset) => {
-        const date = new Date(preset.updatedAt);
+        const displayDate = new Date(preset.lastExecutedAt || preset.updatedAt);
         const dateStr = `${
-          date.getMonth() + 1
-        }/${date.getDate()} ${date.getHours()}:${date
+          displayDate.getMonth() + 1
+        }/${displayDate.getDate()} ${displayDate.getHours()}:${displayDate
           .getMinutes()
           .toString()
           .padStart(2, "0")}`;
@@ -1167,10 +1183,13 @@ async function loadPresets() {
             <div class="preset-details">
               ${preset.windows.length}個のウィンドウ • ${dateStr}
               ${preset.description ? `<br>${preset.description}` : ""}
+              <div id="preset-icons-${
+                preset.id
+              }" style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: nowrap; overflow: hidden;"></div>
             </div>
           </div>
           <div class="preset-actions">
-            <button class="preset-btn load" onclick="loadPreset('${
+            <button class="preset-btn load" onclick="openPresetRestoreDialog('${
               preset.id
             }')">
               <span class="material-icons" style="font-size: 14px;">play_arrow</span>
@@ -1186,6 +1205,48 @@ async function loadPresets() {
       `;
       })
       .join("");
+
+    // プリセット内アプリのアイコンを横並びで表示
+    try {
+      // すべてのプリセットから一意なアプリ名を収集
+      const allAppNames = [
+        ...new Set(presets.flatMap((p) => p.windows.map((w) => w.appName))),
+      ];
+
+      if (allAppNames.length > 0) {
+        const iconMap = await window.windowAPI.getAppIconsBatch(allAppNames);
+
+        // 各プリセットのアイコン行を描画
+        presets.forEach((preset) => {
+          const container = document.getElementById(
+            `preset-icons-${preset.id}`
+          );
+          if (!container) return;
+
+          const appNames = [...new Set(preset.windows.map((w) => w.appName))];
+
+          const iconsHtml = appNames
+            .map((name) => {
+              const icon = iconMap[name];
+              if (icon) {
+                return `<img src="${icon}" title="${name}" alt="${name}" style="width: 18px; height: 18px; border-radius: 4px; object-fit: cover; flex: 0 0 auto;">`;
+              }
+              // フォールバック（プレースホルダ）
+              const initial = (name || "?").charAt(0).toUpperCase();
+              return `
+                <div title="${name}" style="width: 18px; height: 18px; border-radius: 4px; background: rgba(0,0,0,0.08); color: #555; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex: 0 0 auto;">
+                  ${initial}
+                </div>
+              `;
+            })
+            .join("");
+
+          container.innerHTML = iconsHtml;
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to load preset icons:", e);
+    }
   } catch (error) {
     console.error("Error loading presets:", error);
     addLog(`プリセット読み込みエラー: ${error.message}`, "error");
@@ -1265,6 +1326,119 @@ async function deletePreset(presetId) {
   } catch (error) {
     console.error("Error deleting preset:", error);
     addLog(`プリセット削除エラー: ${error.message}`, "error");
+  }
+}
+
+// --- Preset restore flow with optional closing of non-included apps ---
+async function openPresetRestoreDialog(presetId) {
+  try {
+    pendingRestorePresetId = presetId;
+    selectedAppsToCloseForRestore.clear();
+
+    let preset = (latestPresets || []).find((p) => p.id === presetId);
+    if (!preset) {
+      const all = await window.windowAPI.getPresets();
+      latestPresets = all;
+      preset = all.find((p) => p.id === presetId);
+      if (!preset) {
+        addLog("プリセットが見つかりません", "error");
+        return;
+      }
+    }
+
+    const presetApps = new Set(preset.windows.map((w) => w.appName));
+    const state = await window.windowAPI.getWindowState();
+    const runningApps = [...new Set(state.windows.map((w) => w.appName))];
+    const extraApps = runningApps.filter(
+      (app) => !presetApps.has(app) && !isSelfApp(app)
+    );
+
+    if (extraApps.length === 0) {
+      await performPresetRestore(presetId);
+      return;
+    }
+
+    const dialog = document.getElementById("presetRestoreDialog");
+    const list = document.getElementById("presetRestoreAppList");
+    const msg = document.getElementById("presetRestoreMessage");
+
+    msg.textContent = `プリセットに含まれないアプリが ${extraApps.length} 個あります。閉じてから復元しますか？`;
+    selectedAppsToCloseForRestore = new Set(extraApps);
+    list.innerHTML = extraApps
+      .map(
+        (name) => `
+      <label style="display:flex; align-items:center; gap:8px; padding:6px; background: rgba(0,0,0,0.05); border-radius:6px; margin-bottom:6px;">
+        <input type="checkbox" data-app-name="${name}" checked onchange="toggleRestoreCloseApp('${name}', this.checked)">
+        <span style="font-size:13px;">${name}</span>
+      </label>
+    `
+      )
+      .join("");
+
+    dialog.style.display = "block";
+  } catch (e) {
+    console.error("openPresetRestoreDialog error", e);
+  }
+}
+
+function cancelPresetRestoreDialog() {
+  const dialog = document.getElementById("presetRestoreDialog");
+  if (dialog) dialog.style.display = "none";
+  pendingRestorePresetId = null;
+  selectedAppsToCloseForRestore.clear();
+}
+
+function toggleRestoreCloseApp(appName, checked) {
+  if (checked) selectedAppsToCloseForRestore.add(appName);
+  else selectedAppsToCloseForRestore.delete(appName);
+}
+
+async function restoreWithoutClosing() {
+  if (!pendingRestorePresetId) return;
+  cancelPresetRestoreDialog();
+  await performPresetRestore(pendingRestorePresetId);
+}
+
+async function closeSelectedAndRestore() {
+  if (!pendingRestorePresetId) return;
+  try {
+    const apps = Array.from(selectedAppsToCloseForRestore).filter(
+      (a) => !isSelfApp(a)
+    );
+    if (apps.length > 0) {
+      addLog(`${apps.length}個のアプリを終了中...`, "info");
+      for (const app of apps) {
+        try {
+          await window.windowAPI.quitApp(app);
+          await new Promise((r) => setTimeout(r, 150));
+        } catch (e) {
+          console.warn(`Failed to quit ${app}:`, e);
+        }
+      }
+      addLog("選択したアプリの終了が完了", "success");
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  } finally {
+    const id = pendingRestorePresetId;
+    cancelPresetRestoreDialog();
+    await performPresetRestore(id);
+  }
+}
+
+async function performPresetRestore(presetId) {
+  try {
+    addLog("プリセットを復元中...", "info");
+    const success = await window.windowAPI.loadPreset(presetId);
+    if (success) {
+      addLog("プリセットを復元しました", "success");
+      setTimeout(() => {
+        refreshWindowList();
+      }, 1000);
+    } else {
+      addLog("プリセットの復元に失敗しました", "error");
+    }
+  } catch (e) {
+    addLog(`復元エラー: ${e.message}`, "error");
   }
 }
 
@@ -1509,6 +1683,13 @@ window.confirmSavePresetFromDialog = async function () {
     addLog(`プリセット保存エラー: ${error.message}`, "error");
   }
 };
+
+// expose preset-restore helpers
+window.openPresetRestoreDialog = openPresetRestoreDialog;
+window.cancelPresetRestoreDialog = cancelPresetRestoreDialog;
+window.toggleRestoreCloseApp = toggleRestoreCloseApp;
+window.restoreWithoutClosing = restoreWithoutClosing;
+window.closeSelectedAndRestore = closeSelectedAndRestore;
 // 統計関連の関数
 let focusChart = null;
 
@@ -2060,6 +2241,7 @@ async function saveNotificationSettings() {
 // AI Optimization Dialog Functions
 let currentOptimizationRecommendations = null;
 let selectedAppsToClose = new Set();
+let selectedAppsToMinimize = new Set();
 
 // デバッグ用: 手動でダイアログを表示
 window.testShowDialog = function () {
@@ -2104,6 +2286,7 @@ function showAIOptimizationDialog(recommendations) {
 
   currentOptimizationRecommendations = recommendations;
   selectedAppsToClose.clear();
+  selectedAppsToMinimize.clear();
 
   // Update system health score
   const scoreElement = document.getElementById("systemHealthScore");
@@ -2163,12 +2346,16 @@ function showAIOptimizationDialog(recommendations) {
     document.getElementById("windowLayoutSection").style.display = "none";
   }
 
-  // Update apps to close list with checkboxes
+  // Update apps to close/minimize list with checkboxes
   const appsContainer = document.getElementById("appsRecommendations");
   if (recommendations.appsToClose && recommendations.appsToClose.length > 0) {
-    // Initialize all apps as selected
+    // Initialize default selections based on suggestedAction
     recommendations.appsToClose.forEach((app) => {
-      selectedAppsToClose.add(app.appName);
+      if (app.suggestedAction === "minimize") {
+        selectedAppsToMinimize.add(app.appName);
+      } else {
+        selectedAppsToClose.add(app.appName);
+      }
     });
 
     appsContainer.innerHTML = recommendations.appsToClose
@@ -2180,20 +2367,19 @@ function showAIOptimizationDialog(recommendations) {
           low: "#6b7280",
         };
 
+        const closeChecked = selectedAppsToClose.has(app.appName)
+          ? "checked"
+          : "";
+        const minimizeChecked = selectedAppsToMinimize.has(app.appName)
+          ? "checked"
+          : "";
+
         return `
         <div style="margin-bottom: 12px; padding: 12px; background: rgba(255, 255, 255, 0.05); border-radius: 8px; border-left: 3px solid ${
           priorityColors[app.priority]
         }">
-          <div style="display: flex; justify-content: space-between; align-items: start">
-            <label style="flex: 1; display: flex; align-items: start; cursor: pointer">
-              <input type="checkbox" 
-                     id="app-checkbox-${index}" 
-                     data-app-name="${app.appName}"
-                     style="margin-right: 10px; margin-top: 2px" 
-                     checked
-                     onchange="toggleAppSelection('${
-                       app.appName
-                     }', this.checked)">
+          <div style="display: flex; justify-content: space-between; align-items: start; gap: 10px;">
+            <div style="flex: 1; display: flex; align-items: start;">
               <div style="flex: 1">
                 <div style="font-weight: 600; margin-bottom: 4px">
                   ${app.appName}
@@ -2214,12 +2400,36 @@ function showAIOptimizationDialog(recommendations) {
                   期待される効果: ${app.expectedBenefit}
                 </div>
               </div>
-            </label>
-            ${
-              app.safeToClose
-                ? '<span class="material-icons" style="color: #4ade80; font-size: 16px; margin-left: 8px" title="安全に閉じることができます">verified</span>'
-                : '<span class="material-icons" style="color: #fbbf24; font-size: 16px; margin-left: 8px" title="注意が必要">warning</span>'
-            }
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; white-space: nowrap;">
+              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox"
+                       data-app-name="${app.appName}"
+                       data-kind="close"
+                       ${closeChecked}
+                       onchange="toggleAppCloseSelection('${
+                         app.appName
+                       }', this.checked)"
+                       style="margin: 0;">
+                終了
+              </label>
+              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox"
+                       data-app-name="${app.appName}"
+                       data-kind="minimize"
+                       ${minimizeChecked}
+                       onchange="toggleAppMinimizeSelection('${
+                         app.appName
+                       }', this.checked)"
+                       style="margin: 0;">
+                最小化
+              </label>
+              ${
+                app.safeToClose
+                  ? '<span class="material-icons" style="color: #4ade80; font-size: 16px;" title="安全に閉じることができます">verified</span>'
+                  : '<span class="material-icons" style="color: #fbbf24; font-size: 16px;" title="注意が必要">warning</span>'
+              }
+            </div>
           </div>
         </div>
       `;
@@ -2233,15 +2443,18 @@ function showAIOptimizationDialog(recommendations) {
     selectAllCheckbox.checked = true;
     selectAllCheckbox.onchange = function () {
       const checkboxes = appsContainer.querySelectorAll(
-        'input[type="checkbox"]'
+        'input[type="checkbox"][data-app-name]'
       );
       checkboxes.forEach((cb) => {
         cb.checked = this.checked;
         const appName = cb.getAttribute("data-app-name");
-        if (this.checked) {
-          selectedAppsToClose.add(appName);
-        } else {
-          selectedAppsToClose.delete(appName);
+        const kind = cb.getAttribute("data-kind");
+        if (kind === "close") {
+          if (this.checked) selectedAppsToClose.add(appName);
+          else selectedAppsToClose.delete(appName);
+        } else if (kind === "minimize") {
+          if (this.checked) selectedAppsToMinimize.add(appName);
+          else selectedAppsToMinimize.delete(appName);
         }
       });
     };
@@ -2260,17 +2473,12 @@ function showAIOptimizationDialog(recommendations) {
   }
 }
 
-function toggleAppSelection(appName, isChecked) {
-  if (isChecked) {
-    selectedAppsToClose.add(appName);
-  } else {
-    selectedAppsToClose.delete(appName);
-  }
-
-  // Update select all checkbox state
+function updateSelectAllState() {
+  if (!currentOptimizationRecommendations) return;
   const totalApps = currentOptimizationRecommendations.appsToClose.length;
-  const selectedCount = selectedAppsToClose.size;
+  const selectedCount = selectedAppsToClose.size; // 近似: 終了選択基準
   const selectAllCheckbox = document.getElementById("selectAllApps");
+  if (!selectAllCheckbox) return;
 
   if (selectedCount === 0) {
     selectAllCheckbox.checked = false;
@@ -2282,6 +2490,17 @@ function toggleAppSelection(appName, isChecked) {
     selectAllCheckbox.checked = false;
     selectAllCheckbox.indeterminate = true;
   }
+}
+
+function toggleAppCloseSelection(appName, isChecked) {
+  if (isChecked) selectedAppsToClose.add(appName);
+  else selectedAppsToClose.delete(appName);
+  updateSelectAllState();
+}
+
+function toggleAppMinimizeSelection(appName, isChecked) {
+  if (isChecked) selectedAppsToMinimize.add(appName);
+  else selectedAppsToMinimize.delete(appName);
 }
 
 function cancelAIOptimization() {
@@ -2361,8 +2580,76 @@ async function confirmAIOptimization() {
       }
     }
 
+    // 最小化（終了は優先されるため、終了に選ばれたアプリは除外）
+    const minimizeTargets = Array.from(selectedAppsToMinimize).filter(
+      (app) => !selectedAppsToClose.has(app)
+    );
+    if (minimizeTargets.length > 0) {
+      try {
+        let minimizeActions = [];
+        const actions = currentOptimizationRecommendations.windowActions || [];
+        // AIが返した最小化アクションから生成
+        minimizeActions = actions
+          .filter((a) => a.type === "minimize")
+          .filter((a) =>
+            minimizeTargets.includes(a.targetWindow.split("-")[0])
+          );
+
+        // 十分なアクションがなければ現在状態から全ウィンドウを対象に生成
+        if (minimizeActions.length === 0) {
+          const state = await window.windowAPI.getWindowState();
+          minimizeActions = state.windows
+            .filter((w) => minimizeTargets.includes(w.appName))
+            .map((w) => ({
+              type: "minimize",
+              targetWindow: w.id,
+              reasoning: "AI最適化（ユーザー選択）: 最小化",
+            }));
+        }
+
+        if (minimizeActions.length > 0) {
+          const results = await window.windowAPI.executeActions(
+            minimizeActions
+          );
+          const ok = results.filter(Boolean).length;
+          if (ok > 0) addLog(`${ok}件のウィンドウを最小化しました`, "success");
+        }
+      } catch (e) {
+        addLog(`最小化の実行中にエラー: ${e.message}`, "error");
+      }
+    }
+
     // Refresh window list
     setTimeout(refreshWindowList, 1000);
+
+    // 実行後のレイアウトをプリセットとして自動保存（履歴用途）
+    try {
+      // 反映のため少し待機
+      await new Promise((r) => setTimeout(r, 1200));
+
+      const intent = currentOptimizationRecommendations?.userIntent || "";
+      const ts = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const nameTs = `${ts.getFullYear()}-${pad(ts.getMonth() + 1)}-${pad(
+        ts.getDate()
+      )} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+      const presetName = intent
+        ? `AI配置 ${nameTs}｜${intent}`
+        : `AI配置 ${nameTs}`;
+      const description = "AI最適化の結果を自動保存";
+
+      const saved = await window.windowAPI.savePreset(presetName, description);
+      if (saved && saved.id) {
+        addLog(`現在の配置をプリセット保存: ${saved.name}`, "success");
+        // プリセット一覧を更新
+        await loadPresets();
+      } else {
+        addLog("プリセットの自動保存に失敗", "warning");
+      }
+    } catch (e) {
+      console.error("Auto-save preset error:", e);
+      addLog(`プリセット自動保存エラー: ${e.message}`, "error");
+    }
   } catch (error) {
     addLog(`最適化エラー: ${error.message}`, "error");
   } finally {
