@@ -307,7 +307,13 @@ ${currentApps.join(', ')}
       );
 
       if (toolUse && typeof toolUse.input === "object") {
-        return toolUse.input as IntegratedAnalysisResult;
+        const result = toolUse.input as any;
+        // 型安全性を確保
+        return {
+          appsToClose: Array.isArray(result.appsToClose) ? result.appsToClose : [],
+          overallAssessment: typeof result.overallAssessment === "string" ? result.overallAssessment : "分析結果を取得できませんでした",
+          systemHealthScore: typeof result.systemHealthScore === "number" ? result.systemHealthScore : 50
+        };
       }
 
       return {

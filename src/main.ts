@@ -739,15 +739,18 @@ async function performAIAnalysis() {
       currentApps
     );
 
-    console.log(`✅ Analysis complete: ${recommendations.appsToClose.length} apps recommended to close`);
+    // appsToCloseが配列であることを確認
+    const appsToClose = Array.isArray(recommendations.appsToClose) ? recommendations.appsToClose : [];
+    
+    console.log(`✅ Analysis complete: ${appsToClose.length} apps recommended to close`);
     console.log(`📈 System health score: ${recommendations.systemHealthScore}/100`);
     
     // 結果をログに出力（デバッグ用）
-    if (recommendations.appsToClose.length > 0) {
+    if (appsToClose.length > 0) {
       console.log("🎯 Apps recommended to close:");
-      recommendations.appsToClose.forEach(app => {
+      appsToClose.forEach(app => {
         console.log(`  - ${app.appName} (${app.priority}): ${app.expectedBenefit}`);
-        console.log(`    Reasons: ${app.reasons.join(', ')}`);
+        console.log(`    Reasons: ${Array.isArray(app.reasons) ? app.reasons.join(', ') : 'No reasons provided'}`);
       });
     }
 
@@ -755,7 +758,12 @@ async function performAIAnalysis() {
 
     // 通知システムに結果を送信
     if (notificationSystem) {
-      await notificationSystem.sendAnalysisNotification(recommendations);
+      // 安全な形式で通知を送信
+      const safeRecommendations = {
+        ...recommendations,
+        appsToClose: appsToClose
+      };
+      await notificationSystem.sendAnalysisNotification(safeRecommendations);
     }
 
   } catch (error) {
