@@ -183,11 +183,11 @@ async function startAnalysis() {
     // オンボーディング完了を記録
     await window.windowAPI.completeOnboarding(appNames);
     
-    progressText.textContent = `分析完了！（処理時間: ${totalTimeText}）メイン画面に移動しています...`;
+    progressText.textContent = `分析完了！（処理時間: ${totalTimeText}）分析結果を表示しています...`;
     
-    // 2秒後にメイン画面に遷移
+    // 2秒後に分析結果画面に遷移
     setTimeout(() => {
-      window.location.href = 'index.html';
+      window.location.href = 'analysis.html';
     }, 2000);
     
   } catch (error) {

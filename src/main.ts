@@ -145,15 +145,19 @@ async function createWindow(loadOnboarding: boolean = false) {
   // オンボーディング状態に応じて適切なページを読み込む
   if (loadOnboarding) {
     mainWindow.loadFile(path.join(__dirname, "../public/onboarding.html"));
+    // オンボーディング時は即座に表示
+    mainWindow.once('ready-to-show', () => {
+      mainWindow?.show();
+      mainWindow?.focus();
+    });
   } else {
     mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
+    // 通常時は非表示（メニューバーから制御）
+    // mainWindow.once('ready-to-show', () => {
+    //   mainWindow?.show();
+    //   mainWindow?.focus();
+    // });
   }
-
-  // ウィンドウは初期状態では非表示（メニューバーから制御）
-  // mainWindow.once('ready-to-show', () => {
-  //   mainWindow?.show();
-  //   mainWindow?.focus();
-  // });
 
   // ウィンドウを閉じる際の処理
   mainWindow.on("close", (event) => {
@@ -477,7 +481,7 @@ app.whenReady().then(async () => {
   });
 
   // オンボーディング状態をチェック
-  const needsOnboarding = !graphManager.isOnboardingCompleted();
+  const needsOnboarding = true; // 強制的にオンボーディングを表示
 
   // メインウィンドウとトレイを作成
   createWindow(needsOnboarding);
@@ -1221,6 +1225,79 @@ app.whenReady().then(async () => {
     } catch (error) {
       console.error(`Error quitting app ${appName}:`, error);
       return false;
+    }
+  });
+
+  // ユーザープロフィール分析
+  ipcMain.handle("analyze-user-profile", async () => {
+    try {
+      console.log("🔍 Analyzing user profile...");
+      
+      // インストール済みアプリを取得
+      const installedApps = await appScanner.getAllInstalledApps();
+      const appNames = installedApps.map(app => app.name);
+      
+      // アプリの説明を取得（GraphManagerから）
+      const appDescriptions = graphManager.getAllApplications();
+      
+      // ユーザープロフィールを分析
+      const profile = await claudeService.analyzeUserProfile(appNames, appDescriptions);
+      console.log("✅ User profile analysis complete:", profile.userType);
+      
+      return profile;
+    } catch (error) {
+      console.error("❌ User profile analysis error:", error);
+      throw error;
+    }
+  });
+
+  // 最適レイアウト生成
+  ipcMain.handle("generate-optimal-layouts", async () => {
+    try {
+      console.log("🎯 Generating optimal layouts...");
+      
+      // まずユーザープロフィールを取得
+      const installedApps = await appScanner.getAllInstalledApps();
+      const appNames = installedApps.map(app => app.name);
+      const appDescriptions = graphManager.getAllApplications();
+      const userProfile = await claudeService.analyzeUserProfile(appNames, appDescriptions);
+      
+      // 最適レイアウトを生成
+      const layouts = await claudeService.generateOptimalLayouts(userProfile, appNames);
+      console.log(`✅ Generated ${layouts.layouts.length} optimal layouts`);
+      
+      return layouts;
+    } catch (error) {
+      console.error("❌ Layout generation error:", error);
+      throw error;
+    }
+  });
+
+  // 統合分析（プロフィール + レイアウト）
+  ipcMain.handle("get-user-analysis", async () => {
+    try {
+      console.log("🔬 Performing comprehensive user analysis...");
+      
+      const installedApps = await appScanner.getAllInstalledApps();
+      const appNames = installedApps.map(app => app.name);
+      const appDescriptions = graphManager.getAllApplications();
+      
+      // 並列で分析を実行
+      const [userProfile, optimalLayouts] = await Promise.all([
+        claudeService.analyzeUserProfile(appNames, appDescriptions),
+        claudeService.analyzeUserProfile(appNames, appDescriptions).then(profile => 
+          claudeService.generateOptimalLayouts(profile, appNames)
+        )
+      ]);
+      
+      console.log("✅ Comprehensive analysis complete");
+      return {
+        profile: userProfile,
+        layouts: optimalLayouts
+      };
+    } catch (error) {
+      console.error("❌ Comprehensive analysis error:", error);
+      throw error;
     }
   });
 });

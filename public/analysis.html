@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>あなたのワークスタイル分析 - Window AI</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #fff;
+            -webkit-app-region: drag;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            -webkit-app-region: no-drag;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .analysis-section {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title .material-icons {
+            font-size: 28px;
+        }
+
+        .user-type {
+            font-size: 1.8rem;
+            font-weight: 700;
+            text-align: center;
+            margin: 20px 0;
+            color: #FFE066;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .characteristics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .characteristic-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .characteristic-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .work-style-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #4ECDC4;
+        }
+
+        .recommendations-list {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .recommendations-list li {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .recommendations-list li .material-icons {
+            color: #4ECDC4;
+            font-size: 20px;
+        }
+
+        .layouts-section {
+            margin-top: 40px;
+        }
+
+        .layouts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .layout-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .layout-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .layout-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s;
+        }
+
+        .layout-card:hover::before {
+            left: 100%;
+        }
+
+        .layout-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #FFE066;
+        }
+
+        .layout-description {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .layout-reasoning {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            font-style: italic;
+            border-left: 3px solid #4ECDC4;
+            padding-left: 12px;
+            margin-bottom: 20px;
+        }
+
+        .layout-preview {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            height: 120px;
+            position: relative;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .window-preview {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #333;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+        }
+
+        .apply-layout-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .apply-layout-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(78, 205, 196, 0.3);
+        }
+
+        .apply-layout-btn .material-icons {
+            font-size: 20px;
+        }
+
+        .loading-state {
+            display: none;
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .loading-state.show {
+            display: block;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-state {
+            display: none;
+            text-align: center;
+            padding: 40px 20px;
+            background: rgba(244, 67, 54, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+
+        .error-state.show {
+            display: block;
+        }
+
+        .confidence-indicator {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 5px 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .continue-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 15px 25px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            -webkit-app-region: no-drag;
+        }
+
+        .continue-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 35px rgba(255, 107, 107, 0.4);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 15px;
+            }
+            
+            .layouts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .characteristics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 あなたのワークスタイル分析</h1>
+            <p>アプリケーションの使用パターンから導き出された、あなただけのインサイト</p>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading-state show">
+            <div class="spinner"></div>
+            <h3>分析中...</h3>
+            <p>あなたの作業パターンを解析しています</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="error-state">
+            <h3>分析に失敗しました</h3>
+            <p>申し訳ございません。しばらく時間をおいてから再度お試しください。</p>
+        </div>
+
+        <!-- Analysis Content -->
+        <div id="analysisContent" style="display: none;">
+            <!-- User Profile Section -->
+            <div class="analysis-section">
+                <div class="section-title">
+                    <span class="material-icons">person</span>
+                    あなたのプロフィール
+                </div>
+                <div class="confidence-indicator" id="profileConfidence">信頼度: --</div>
+                <div class="user-type" id="userType">分析中...</div>
+                <div class="characteristics-grid" id="characteristicsGrid">
+                    <!-- 特徴カードが動的に追加される -->
+                </div>
+            </div>
+
+            <!-- Work Style Section -->
+            <div class="analysis-section">
+                <div class="section-title">
+                    <span class="material-icons">work</span>
+                    ワークスタイル
+                </div>
+                <div class="work-style-box" id="workStyleBox">
+                    <div id="workStyle">分析中...</div>
+                </div>
+            </div>
+
+            <!-- Recommendations Section -->
+            <div class="analysis-section">
+                <div class="section-title">
+                    <span class="material-icons">lightbulb</span>
+                    改善提案
+                </div>
+                <ul class="recommendations-list" id="recommendationsList">
+                    <!-- 推奨事項が動的に追加される -->
+                </ul>
+            </div>
+
+            <!-- Optimal Layouts Section -->
+            <div class="layouts-section">
+                <div class="analysis-section">
+                    <div class="section-title">
+                        <span class="material-icons">dashboard_customize</span>
+                        あなた専用のウィンドウ配置
+                    </div>
+                    <p style="opacity: 0.9; margin-bottom: 20px;">
+                        あなたのワークスタイルに最適化されたウィンドウレイアウトを提案します。
+                        気に入った配置をクリックして適用できます。
+                    </p>
+                    <div class="layouts-grid" id="layoutsGrid">
+                        <!-- レイアウトカードが動的に追加される -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="continue-btn" onclick="continueToMainApp()">
+        <span class="material-icons">arrow_forward</span>
+        メインアプリへ
+    </button>
+
+    <script src="analysis-renderer.js"></script>
+</body>
+</html>
