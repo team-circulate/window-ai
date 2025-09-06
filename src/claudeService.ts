@@ -170,13 +170,11 @@ OUTPUT BREVITY RULES (critical):
     } as any;
 
     // 入力は短キーJSONのみ（改行や装飾なし）
-    const compactProcesses = (processes || [])
-      .slice(0, 6)
-      .map((p) => ({
-        n: p.name,
-        c: Number(p.cpuUsage?.toFixed(1) || 0),
-        m: Number(p.memoryUsage?.toFixed(0) || 0),
-      }));
+    const compactProcesses = (processes || []).slice(0, 6).map((p) => ({
+      n: p.name,
+      c: Number(p.cpuUsage?.toFixed(1) || 0),
+      m: Number(p.memoryUsage?.toFixed(0) || 0),
+    }));
 
     const userMessage = JSON.stringify(
       {
@@ -420,6 +418,369 @@ OUTPUT BREVITY RULES (critical):
     }
 
     return actions;
+  }
+
+  async analyzeUserProfile(
+    appNames: string[],
+    appDescriptions: Array<{ name: string; observations: string[] }>
+  ): Promise<{
+    userType: string;
+    characteristics: string[];
+    recommendations: string[];
+    confidence: number;
+  }> {
+    const systemPrompt = `
+あなたはユーザーの行動分析エキスパートです。
+インストールされているアプリケーションとその特徴から、ユーザーの特性を洞察してください。
+
+以下の観点で分析してください：
+1. ユーザータイプ（職業・役割）
+2. 特徴・性格（創造的、分析的、コラボレーション重視など）
+3. 改善提案（効率化のヒント）
+
+「言い当てて驚かせる」のではなく「理解して役立つ」ことを重視してください。
+`;
+
+    const userMessage = `
+アプリケーション一覧: ${appNames.join(", ")}
+
+アプリケーション詳細:
+${JSON.stringify(appDescriptions, null, 2)}
+`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1500,
+        temperature: 0.4,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+        tools: [
+          {
+            name: "analyze_user_profile",
+            description: "Analyze user profile from installed applications",
+            input_schema: {
+              type: "object",
+              properties: {
+                userType: {
+                  type: "string",
+                  description:
+                    "Primary user type or role (e.g., '開発者', 'デザイナー', 'ビジネスパーソン')",
+                },
+                characteristics: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Key characteristics and traits",
+                },
+                recommendations: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Actionable recommendations for improvement",
+                },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                  description: "Confidence in the analysis",
+                },
+              },
+              required: [
+                "userType",
+                "characteristics",
+                "recommendations",
+                "confidence",
+              ],
+            },
+          },
+        ],
+        tool_choice: { type: "tool", name: "analyze_user_profile" },
+      });
+
+      const toolUse = response.content.find(
+        (content): content is any =>
+          content.type === "tool_use" && content.name === "analyze_user_profile"
+      );
+
+      if (!toolUse) {
+        return {
+          userType: "一般ユーザー",
+          characteristics: ["様々なアプリを活用"],
+          recommendations: ["より効率的な作業環境の構築を検討してみてください"],
+          confidence: 0.3,
+        };
+      }
+
+      return toolUse.input;
+    } catch (error) {
+      console.error("Error analyzing user profile:", error);
+      throw error;
+    }
+  }
+
+  async generateWorkflowSuggestions(
+    userProfile: any,
+    appNames: string[],
+    appDescriptions: Array<{ name: string; observations: string[] }>
+  ): Promise<{
+    workflows: Array<{
+      name: string;
+      description: string;
+      apps: Array<{
+        appName: string;
+        role: string;
+        reasoning: string;
+      }>;
+      tips: string[];
+      confidence: number;
+    }>;
+  }> {
+    const systemPrompt = `
+あなたはワークフロー最適化のエキスパートです。
+
+ユーザーのプロフィールとインストール済みアプリケーションから、具体的な作業フローを3つ提案してください。
+
+各作業フローには以下を含めてください：
+- 作業名（具体的で親しみやすい名前）
+- 作業の説明
+- 使用するアプリとその役割
+- 実践的なコツやヒント
+
+アプリの提案基準：
+1. 実際にインストールされているアプリのみ使用
+2. アプリの特徴（observations）を考慮
+3. ユーザーの特性に合った組み合わせ
+4. 実践的で日常的に使える作業フロー
+
+出力は日本語で、実用性を重視してください。
+`;
+
+    const userMessage = `
+ユーザープロフィール:
+${JSON.stringify(userProfile, null, 2)}
+
+利用可能なアプリケーション: ${appNames.join(", ")}
+
+アプリケーション詳細:
+${JSON.stringify(appDescriptions, null, 2)}
+
+このユーザーが効率的に作業できる、具体的なワークフローを3つ提案してください。
+`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 2000,
+        temperature: 0.4,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+        tools: [
+          {
+            name: "generate_workflows",
+            description:
+              "Generate workflow suggestions based on user profile and apps",
+            input_schema: {
+              type: "object",
+              properties: {
+                workflows: {
+                  type: "array",
+                  maxItems: 3,
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      description: { type: "string" },
+                      apps: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            appName: { type: "string" },
+                            role: { type: "string" },
+                            reasoning: { type: "string" },
+                          },
+                          required: ["appName", "role", "reasoning"],
+                        },
+                      },
+                      tips: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      confidence: {
+                        type: "number",
+                        minimum: 0,
+                        maximum: 1,
+                      },
+                    },
+                    required: [
+                      "name",
+                      "description",
+                      "apps",
+                      "tips",
+                      "confidence",
+                    ],
+                  },
+                },
+              },
+              required: ["workflows"],
+            },
+          },
+        ],
+        tool_choice: { type: "tool", name: "generate_workflows" },
+      });
+
+      const toolUse = response.content.find(
+        (content): content is any =>
+          content.type === "tool_use" && content.name === "generate_workflows"
+      );
+
+      if (!toolUse) {
+        return { workflows: [] };
+      }
+
+      return toolUse.input;
+    } catch (error) {
+      console.error("Error generating workflow suggestions:", error);
+      throw error;
+    }
+  }
+
+  async generateOptimalLayouts(
+    userProfile: any,
+    appNames: string[]
+  ): Promise<{
+    layouts: Array<{
+      name: string;
+      description: string;
+      reasoning: string;
+      preset: {
+        name: string;
+        description: string;
+        windows: Array<{
+          appName: string;
+          position: { x: number; y: number };
+          size: { width: number; height: number };
+        }>;
+      };
+    }>;
+    confidence: number;
+  }> {
+    const systemPrompt = `
+あなたはウィンドウレイアウト最適化のエキスパートです。
+
+ユーザーのプロフィールとアプリケーション一覧から、最適なウィンドウ配置パターンを3つ提案してください。
+
+macOSの標準的なディスプレイサイズ（1440x900）を基準に、実用的な配置を提案してください。
+
+各レイアウトには以下を含めてください：
+- 名前（親しみやすい名前）
+- 説明（どんな作業に適しているか）
+- 理由（なぜこのユーザーに適しているか）
+- 具体的な座標とサイズ
+
+ウィンドウのサイズと位置の制約：
+- x, y: 0以上
+- width: 最小400、最大1440
+- height: 最小300、最大900
+- ウィンドウ同士の重複は最小限に
+`;
+
+    const userMessage = `
+ユーザープロフィール:
+${JSON.stringify(userProfile, null, 2)}
+
+利用可能なアプリケーション: ${appNames.join(", ")}
+
+メインアプリ（頻繁に使用されそうなもの）を中心に、3つのレイアウトパターンを提案してください。
+`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 2000,
+        temperature: 0.3,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+        tools: [
+          {
+            name: "generate_layouts",
+            description: "Generate optimal window layouts",
+            input_schema: {
+              type: "object",
+              properties: {
+                layouts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      description: { type: "string" },
+                      reasoning: { type: "string" },
+                      preset: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" },
+                          windows: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                appName: { type: "string" },
+                                position: {
+                                  type: "object",
+                                  properties: {
+                                    x: { type: "number" },
+                                    y: { type: "number" },
+                                  },
+                                },
+                                size: {
+                                  type: "object",
+                                  properties: {
+                                    width: { type: "number" },
+                                    height: { type: "number" },
+                                  },
+                                },
+                              },
+                              required: ["appName", "position", "size"],
+                            },
+                          },
+                        },
+                        required: ["name", "description", "windows"],
+                      },
+                    },
+                    required: ["name", "description", "reasoning", "preset"],
+                  },
+                },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                },
+              },
+              required: ["layouts", "confidence"],
+            },
+          },
+        ],
+        tool_choice: { type: "tool", name: "generate_layouts" },
+      });
+
+      const toolUse = response.content.find(
+        (content): content is any =>
+          content.type === "tool_use" && content.name === "generate_layouts"
+      );
+
+      if (!toolUse) {
+        return {
+          layouts: [],
+          confidence: 0,
+        };
+      }
+
+      return toolUse.input;
+    } catch (error) {
+      console.error("Error generating layouts:", error);
+      throw error;
+    }
   }
 
   async suggestAppsForTask(

@@ -180,6 +180,19 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("quit-recommended-app", appName);
   },
 
+  // User analysis APIs
+  getUserProfile: (): Promise<any> => {
+    return ipcRenderer.invoke("analyze-user-profile");
+  },
+
+  getOptimalLayouts: (): Promise<any> => {
+    return ipcRenderer.invoke("generate-optimal-layouts");
+  },
+
+  getUserAnalysis: (): Promise<any> => {
+    return ipcRenderer.invoke("get-user-analysis");
+  },
+
   // Real-time event listeners
   onActiveAppChanged: (callback: (appName: string) => void) => {
     ipcRenderer.on("active-app-changed", (_, appName) => callback(appName));
