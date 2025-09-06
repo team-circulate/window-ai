@@ -4,14 +4,17 @@ import * as os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { WindowState, WindowInfo, Display, WindowAction, CpuInfo, ProcessInfo, AppResourceUsage } from "./types";
+import { GraphManager } from "./graphManager";
 
 const execAsync = promisify(exec);
 
 export class WindowManager {
   private claudeService?: any; // ClaudeServiceのインスタンス
+  private graphManager: GraphManager;
   
   constructor(claudeService?: any) {
     this.claudeService = claudeService;
+    this.graphManager = new GraphManager();
   }
   async getWindowState(): Promise<WindowState> {
     const windows = await this.getAllWindows();
@@ -21,6 +24,9 @@ export class WindowManager {
 
     // ウィンドウとプロセスのCPU/メモリ使用率を関連付け
     const windowsWithResourceUsage = await this.enrichWindowsWithResourceUsage(windows, cpuInfo.processes);
+
+    // Check for unknown apps and generate descriptions
+    await this.checkAndGenerateAppDescriptions(windowsWithResourceUsage);
 
     return {
       windows: windowsWithResourceUsage,
@@ -1218,6 +1224,35 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
     }
     
     return descriptions;
+  }
+
+  private async checkAndGenerateAppDescriptions(windows: WindowInfo[]): Promise<void> {
+    try {
+      // Get unique app names from windows
+      const appNames = [...new Set(windows.map(w => w.appName))];
+      
+      // Check which apps are unknown
+      const unknownApps = this.graphManager.getUnknownApplications(appNames);
+      
+      if (unknownApps.length > 0 && this.claudeService) {
+        console.log(`Found ${unknownApps.length} unknown apps, generating descriptions...`);
+        
+        // Generate descriptions for unknown apps
+        const descriptions = await this.claudeService.generateApplicationDescriptions(unknownApps);
+        
+        // Add apps to graph
+        this.graphManager.addApplications(descriptions);
+        
+        console.log(`Added ${descriptions.length} apps to knowledge graph`);
+      }
+    } catch (error) {
+      console.error('Error checking/generating app descriptions:', error);
+    }
+  }
+
+  public getApplicationInfo(appName: string): string[] | null {
+    const app = this.graphManager.getApplication(appName);
+    return app ? app.observations : null;
   }
 
   private getDefaultDescription(processName: string): string {

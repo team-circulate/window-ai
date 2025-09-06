@@ -4,20 +4,24 @@ import {
   ipcMain,
   systemPreferences,
   dialog,
-  nativeImage,
 } from "electron";
 import * as path from "path";
-import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./windowManager";
 import { ClaudeService } from "./claudeService";
+import { AppScanner } from "./appScanner";
+import { GraphManager } from "./graphManager";
+import { IconExtractor } from "./iconExtractor";
 import { WindowState, WindowAction } from "./types";
 
 let mainWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
+let appScanner: AppScanner;
+let graphManager: GraphManager;
+let iconExtractor: IconExtractor;
 
-async function createWindow() {
+async function createWindow(loadOnboarding: boolean = false) {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
@@ -32,7 +36,12 @@ async function createWindow() {
     alwaysOnTop: false,
   });
 
-  mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
+  // オンボーディング状態に応じて適切なページを読み込む
+  if (loadOnboarding) {
+    mainWindow.loadFile(path.join(__dirname, "../public/onboarding.html"));
+  } else {
+    mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
+  }
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -88,43 +97,90 @@ app.whenReady().then(async () => {
 
   claudeService = new ClaudeService(apiKey || "");
   windowManager = new WindowManager(claudeService);
+  appScanner = new AppScanner();
+  graphManager = new GraphManager();
+  iconExtractor = new IconExtractor();
 
-  createWindow();
+  // アプリ起動時にアイコンをプリロード（バックグラウンド）
+  appScanner.getAllInstalledApps().then(apps => {
+    iconExtractor.preloadAllIcons(apps).catch(error => {
+      console.error('Icon preload failed:', error);
+    });
+  });
+
+  // オンボーディング状態をチェック
+  const needsOnboarding = !graphManager.isOnboardingCompleted();
+  createWindow(needsOnboarding);
 
   ipcMain.handle("get-window-state", async (): Promise<WindowState> => {
     return await windowManager.getWindowState();
   });
 
   ipcMain.handle(
+    "get-app-info",
+    async (event, appName: string): Promise<string[] | null> => {
+      return windowManager.getApplicationInfo(appName);
+    }
+  );
+
+  ipcMain.handle("get-installed-apps", async () => {
+    return await appScanner.getAllInstalledApps();
+  });
+
+  ipcMain.handle("search-apps", async (event, query: string) => {
+    return await appScanner.searchApps(query);
+  });
+
+  ipcMain.handle("launch-app", async (event, appName: string) => {
+    return await appScanner.launchApp(appName);
+  });
+
+  ipcMain.handle("launch-app-by-path", async (event, appPath: string) => {
+    return await appScanner.launchAppByPath(appPath);
+  });
+
+  ipcMain.handle(
     "get-app-icon",
     async (_, appName: string): Promise<string | null> => {
       try {
-        // アプリケーションのパスを取得
-        const appPath = `/Applications/${appName}.app/Contents/Resources/`;
-        const iconFiles = ["app.icns", "AppIcon.icns", `${appName}.icns`];
-
-        for (const iconFile of iconFiles) {
-          const iconPath = path.join(appPath, iconFile);
-          if (fs.existsSync(iconPath)) {
-            // アイコンをBase64エンコード
-            const image = nativeImage.createFromPath(iconPath);
-            const resized = image.resize({ width: 32, height: 32 });
-            return resized.toDataURL();
-          }
-        }
-
-        // システムデフォルトアイコンを試す
-        const systemIconPath = `/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns`;
-        if (fs.existsSync(systemIconPath)) {
-          const image = nativeImage.createFromPath(systemIconPath);
-          const resized = image.resize({ width: 32, height: 32 });
-          return resized.toDataURL();
-        }
-
-        return null;
+        // まずアプリスキャナーで実際のパスを取得
+        const apps = await appScanner.getAllInstalledApps();
+        const app = apps.find(a => a.name === appName);
+        
+        // IconExtractorを使用してアイコンを取得
+        const icon = await iconExtractor.getAppIcon(appName, app?.path);
+        return icon;
       } catch (error) {
         console.error(`Error getting icon for ${appName}:`, error);
         return null;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-app-icons-batch",
+    async (_, appNames: string[]): Promise<Record<string, string | null>> => {
+      try {
+        // アプリスキャナーで実際のパスを取得
+        const allApps = await appScanner.getAllInstalledApps();
+        const appsToLoad = appNames.map(name => {
+          const app = allApps.find(a => a.name === name);
+          return { name, path: app?.path };
+        });
+        
+        // バッチでアイコンを取得
+        const icons = await iconExtractor.getAppIconsBatch(appsToLoad);
+        
+        // MapをObjectに変換
+        const result: Record<string, string | null> = {};
+        for (const [name, icon] of icons) {
+          result[name] = icon;
+        }
+        
+        return result;
+      } catch (error) {
+        console.error(`Error getting batch icons:`, error);
+        return {};
       }
     }
   );
@@ -219,6 +275,91 @@ app.whenReady().then(async () => {
       return await windowManager.getCpuInfo();
     }
   );
+
+  ipcMain.handle("analyze-apps", async (_, appNames: string[]) => {
+    console.log(`Analyzing ${appNames.length} apps`);
+
+    // 未知のアプリのみを分析
+    const unknownApps = graphManager.getUnknownApplications(appNames);
+
+    if (unknownApps.length > 0) {
+      console.log(`Found ${unknownApps.length} unknown apps to analyze`);
+
+      // Claudeで説明文を生成
+      const descriptions = await claudeService.generateApplicationDescriptions(
+        unknownApps
+      );
+
+      // グラフに追加
+      graphManager.addApplications(descriptions);
+
+      return descriptions;
+    }
+
+    return [];
+  });
+
+  ipcMain.handle("complete-onboarding", async (_, analyzedApps: string[]) => {
+    console.log("Completing onboarding with", analyzedApps.length, "apps");
+    graphManager.completeOnboarding(analyzedApps);
+    return true;
+  });
+
+  ipcMain.handle("check-onboarding", async () => {
+    return graphManager.isOnboardingCompleted();
+  });
+
+  ipcMain.handle("check-new-apps", async () => {
+    // 現在のウィンドウ状態から実行中のアプリを取得
+    const windowState = await windowManager.getWindowState();
+    const runningApps = [...new Set(windowState.windows.map((w) => w.appName))];
+
+    // 未知のアプリをチェック
+    const unknownApps = graphManager.getUnknownApplications(runningApps);
+
+    if (unknownApps.length > 0) {
+      console.log(
+        `Found ${unknownApps.length} new apps to analyze: ${unknownApps.join(
+          ", "
+        )}`
+      );
+
+      // 新しいアプリの説明を生成
+      const descriptions = await claudeService.generateApplicationDescriptions(
+        unknownApps
+      );
+
+      // グラフに追加
+      graphManager.addApplications(descriptions);
+
+      return { newAppsFound: true, apps: unknownApps };
+    }
+
+    return { newAppsFound: false, apps: [] };
+  });
+
+  ipcMain.handle("reset-local-data", async () => {
+    try {
+      console.log("Resetting local data...");
+      
+      // GraphManagerのデータをクリア
+      graphManager.clearData();
+      
+      // アイコンキャッシュもクリア
+      iconExtractor.clearCache();
+      
+      console.log("Local data cleared successfully");
+      
+      // アプリケーションを再起動
+      app.relaunch();
+      app.exit(0);
+      
+      return true;
+    } catch (error) {
+      console.error("Error resetting local data:", error);
+      return false;
+    }
+  });
 });
 
 app.on("window-all-closed", () => {

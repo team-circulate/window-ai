@@ -29,6 +29,34 @@
         flex-direction: column;
       }
 
+      .reset-button {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(244, 67, 54, 0.8);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        z-index: 1000;
+        -webkit-app-region: no-drag;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .reset-button:hover {
+        background: rgba(244, 67, 54, 0.95);
+        transform: scale(1.05);
+      }
+
+      .reset-button .material-icons {
+        font-size: 18px;
+      }
+
       .header {
         padding: 30px 20px 20px;
         text-align: center;
@@ -207,6 +235,137 @@
         align-items: center;
         gap: 10px;
         flex: 1;
+      }
+
+      .app-info-btn {
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        color: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+        font-style: italic;
+        font-family: Georgia, serif;
+        margin-left: 6px;
+        padding: 0;
+        transition: all 0.2s;
+        flex-shrink: 0;
+      }
+
+      .app-info-btn:hover {
+        background: rgba(255, 255, 255, 0.25);
+        border-color: rgba(255, 255, 255, 0.4);
+        transform: scale(1.05);
+      }
+
+      .observation-item {
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        margin-bottom: 8px;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .observation-item .material-icons {
+        font-size: 18px;
+        opacity: 0.8;
+      }
+
+      /* App Search Results */
+      .app-search-item {
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: all 0.2s;
+        cursor: pointer;
+      }
+
+      .app-search-item:hover {
+        background: rgba(255, 255, 255, 0.15);
+        transform: translateX(5px);
+      }
+
+      .app-search-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+      }
+
+      .app-search-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+
+      .app-search-icon-placeholder {
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .app-search-details {
+        flex: 1;
+      }
+
+      .app-search-name {
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+
+      .app-search-version {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+
+      .app-launch-btn {
+        padding: 8px 16px;
+        background: rgba(76, 175, 80, 0.2);
+        border: 1px solid rgba(76, 175, 80, 0.3);
+        border-radius: 6px;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+      }
+
+      .app-launch-btn:hover {
+        background: rgba(76, 175, 80, 0.4);
+        transform: scale(1.05);
+      }
+
+      .app-launch-btn .material-icons {
+        font-size: 16px;
+      }
+
+      .no-results {
+        text-align: center;
+        padding: 20px;
+        opacity: 0.7;
+        font-size: 14px;
       }
 
       .window-details {
@@ -498,12 +657,39 @@
     </style>
   </head>
   <body>
+    <button class="reset-button" onclick="resetLocalData()" title="データをリセット">
+      <span class="material-icons">delete_forever</span>
+      リセット
+    </button>
+    
     <div class="header">
       <h1><span class="material-icons">window</span> Window AI Manager</h1>
       <p>AIがウィンドウ配置を最適化します</p>
     </div>
 
     <div class="main-content">
+      <!-- App Launcher Section -->
+      <div class="input-section" style="margin-bottom: 20px;">
+        <div class="status-title" style="margin-bottom: 15px;">
+          <span class="material-icons" style="font-size: 18px;">rocket_launch</span>
+          アプリケーション起動
+        </div>
+        <div class="input-group">
+          <input
+            type="text"
+            id="appSearchInput"
+            placeholder="アプリケーション名を入力 (例: Safari, Slack)"
+            autocomplete="off"
+          />
+          <button id="searchAppsBtn">
+            <span class="material-icons">search</span> 検索
+          </button>
+        </div>
+        <div id="appSearchResults" style="margin-top: 15px; max-height: 300px; overflow-y: auto;">
+          <!-- Search results will appear here -->
+        </div>
+      </div>
+
       <div class="input-section">
         <div class="input-group">
           <input
@@ -519,7 +705,23 @@
           </button>
         </div>
 
-        <div class="quick-actions">
+        <!-- すべてのアプリを閉じるボタン -->
+        <div style="margin-top: 15px">
+          <button
+            id="closeAllAppsBtn"
+            style="
+              background: rgba(244, 67, 54, 0.8);
+              width: 100%;
+              color: white;
+            "
+          >
+            <span class="material-icons">close</span>
+            すべてのアプリケーションを終了
+          </button>
+        </div>
+
+        <!-- ウィンドウ配置アクションは一時的にコメントアウト -->
+        <!-- <div class="quick-actions">
           <button class="quick-action" data-intent="作業用レイアウトにして">
             <span class="material-icons">dashboard</span> 作業用
           </button>
@@ -541,7 +743,7 @@
           >
             <span class="material-icons">center_focus_strong</span> 中央配置
           </button>
-        </div>
+        </div> -->
       </div>
 
       <div class="cpu-section">
@@ -576,6 +778,114 @@
       <div class="log-section">
         <div id="logContainer">
           <div class="log-entry info">Window AI Manager 起動完了</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- App Info Modal -->
+    <div id="appInfoModal" style="
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+      backdrop-filter: blur(3px);
+    ">
+      <div style="
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        padding: 20px;
+        min-width: 350px;
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+      ">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h3 id="appInfoTitle" style="margin: 0; font-size: 18px; font-weight: 600;"></h3>
+          <button onclick="closeAppInfoModal()" style="
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <span class="material-icons">close</span>
+          </button>
+        </div>
+        <div id="appInfoContent" style="">
+          <!-- Observations will be listed here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Close All Apps Dialog -->
+    <div
+      id="closeAllAppsDialog"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1000;
+        backdrop-filter: blur(5px);
+      "
+    >
+      <div
+        style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 12px;
+          padding: 24px;
+          min-width: 400px;
+          max-width: 600px;
+          max-height: 80vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        "
+      >
+        <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: 600">
+          <span
+            class="material-icons"
+            style="vertical-align: middle; margin-right: 8px"
+            >warning</span
+          >
+          アプリケーションを閉じる
+        </h2>
+        <p style="margin-bottom: 20px; opacity: 0.9; font-size: 14px">
+          閉じたくないアプリケーションにチェックを入れてください。
+          チェックされていないアプリケーションはすべて終了されます。
+        </p>
+        <div id="appCheckboxList" style="margin-bottom: 20px">
+          <!-- App checkboxes will be dynamically added here -->
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <button
+            onclick="cancelCloseAllApps()"
+            style="background: rgba(255, 255, 255, 0.2); color: white"
+          >
+            <span class="material-icons">cancel</span> キャンセル
+          </button>
+          <button
+            onclick="confirmCloseAllApps()"
+            style="background: rgba(244, 67, 54, 0.9); color: white"
+          >
+            <span class="material-icons">check_circle</span> 閉じる
+          </button>
         </div>
       </div>
     </div>

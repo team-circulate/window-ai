@@ -2,9 +2,12 @@ let currentWindows = [];
 let iconCache = {}; // アイコンのキャッシュ
 
 // Initialize
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   refreshWindowList();
   refreshCpuInfo();
+  
+  // 新しいアプリをチェック
+  checkForNewApps();
 
   // Event listeners
   document
@@ -16,6 +19,26 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("cpuRefreshBtn")
     .addEventListener("click", refreshCpuInfo);
+  document
+    .getElementById("closeAllAppsBtn")
+    .addEventListener("click", showCloseAllAppsDialog);
+  
+  // App search event listeners
+  document
+    .getElementById("searchAppsBtn")
+    .addEventListener("click", searchApps);
+  document
+    .getElementById("appSearchInput")
+    .addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        searchApps();
+      }
+    });
+  
+  // リアルタイム検索
+  document
+    .getElementById("appSearchInput")
+    .addEventListener("input", debounce(searchApps, 300));
 
   // Auto-refresh CPU info every 5 seconds
   setInterval(() => {
@@ -148,7 +171,12 @@ function displayWindows(windows) {
         ${iconHtml}
         <div class="window-details">
           <div class="window-main-info">
-            <strong>${window.appName}</strong>
+            <strong>
+              ${window.appName}
+              <button class="app-info-btn" onclick="event.stopPropagation(); showAppInfo('${window.appName}')" title="アプリ情報">
+                i
+              </button>
+            </strong>
             <br>
             <small>${window.title || "Untitled"}</small>
             ${
@@ -455,3 +483,348 @@ function addLog(message, type = "info") {
     logContainer.removeChild(logContainer.lastChild);
   }
 }
+
+// Close All Apps Dialog functions
+function showCloseAllAppsDialog() {
+  // Get unique app names from current windows
+  const uniqueApps = [...new Set(currentWindows.map((w) => w.appName))];
+
+  if (uniqueApps.length === 0) {
+    addLog("閉じるアプリケーションがありません", "info");
+    return;
+  }
+
+  // Build checkbox list
+  const appCheckboxList = document.getElementById("appCheckboxList");
+  appCheckboxList.innerHTML = uniqueApps
+    .map((appName) => {
+      const windowCount = currentWindows.filter(
+        (w) => w.appName === appName
+      ).length;
+      const icon = currentWindows.find((w) => w.appName === appName)?.appIcon;
+      const iconHtml = icon
+        ? `<img src="${icon}" style="width: 24px; height: 24px; border-radius: 4px; margin-right: 8px; vertical-align: middle;">`
+        : '<span class="material-icons" style="font-size: 24px; margin-right: 8px; vertical-align: middle; opacity: 0.7;">web_asset</span>';
+
+      return `
+      <div style="
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        transition: background 0.2s;
+      " onmouseover="this.style.background='rgba(255, 255, 255, 0.15)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.1)'">
+        <input type="checkbox" id="keep-${appName}" value="${appName}" style="
+          width: 20px;
+          height: 20px;
+          margin-right: 12px;
+          cursor: pointer;
+        ">
+        <label for="keep-${appName}" style="
+          flex: 1;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          font-size: 14px;
+        ">
+          ${iconHtml}
+          <span>
+            <strong>${appName}</strong>
+            <span style="opacity: 0.7; margin-left: 8px; font-size: 12px;">
+              (${windowCount} ウィンドウ)
+            </span>
+          </span>
+        </label>
+      </div>
+    `;
+    })
+    .join("");
+
+  // Show dialog
+  document.getElementById("closeAllAppsDialog").style.display = "block";
+}
+
+function cancelCloseAllApps() {
+  document.getElementById("closeAllAppsDialog").style.display = "none";
+}
+
+async function confirmCloseAllApps() {
+  try {
+    // Get checked apps (apps to keep open)
+    const checkboxes = document.querySelectorAll(
+      '#appCheckboxList input[type="checkbox"]'
+    );
+    const appsToKeep = Array.from(checkboxes)
+      .filter((cb) => cb.checked)
+      .map((cb) => cb.value);
+
+    // Get apps to close (unchecked ones)
+    const appsToClose = [
+      ...new Set(currentWindows.map((w) => w.appName)),
+    ].filter((appName) => !appsToKeep.includes(appName));
+
+    if (appsToClose.length === 0) {
+      addLog("閉じるアプリケーションが選択されていません", "info");
+      cancelCloseAllApps();
+      return;
+    }
+
+    // Close the dialog
+    cancelCloseAllApps();
+
+    // Close each app
+    addLog(`${appsToClose.length}個のアプリケーションを終了中...`, "info");
+
+    for (const appName of appsToClose) {
+      try {
+        const success = await window.windowAPI.quitApp(appName);
+        if (success) {
+          addLog(`${appName} を終了しました`, "success");
+        } else {
+          addLog(`${appName} の終了に失敗しました`, "error");
+        }
+        // Small delay between closing apps
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (error) {
+        addLog(`${appName} の終了エラー: ${error.message}`, "error");
+      }
+    }
+
+    // Refresh window list after closing apps
+    setTimeout(refreshWindowList, 1000);
+  } catch (error) {
+    addLog(`アプリケーション終了エラー: ${error.message}`, "error");
+  }
+}
+
+// App Info Modal functions
+async function showAppInfo(appName) {
+  try {
+    const observations = await window.windowAPI.getAppInfo(appName);
+    
+    document.getElementById('appInfoTitle').textContent = appName;
+    const contentDiv = document.getElementById('appInfoContent');
+    
+    if (observations && observations.length > 0) {
+      contentDiv.innerHTML = observations.map(obs => `
+        <div class="observation-item">
+          <span class="material-icons">lens</span>
+          <span>${obs}</span>
+        </div>
+      `).join('');
+    } else {
+      contentDiv.innerHTML = `
+        <div class="observation-item">
+          <span class="material-icons">info</span>
+          <span>情報を取得中...</span>
+        </div>
+      `;
+      
+      // Refresh window list to trigger description generation
+      setTimeout(async () => {
+        await refreshWindowList();
+        // Try again after refresh
+        const newObservations = await window.windowAPI.getAppInfo(appName);
+        if (newObservations && newObservations.length > 0) {
+          contentDiv.innerHTML = newObservations.map(obs => `
+            <div class="observation-item">
+              <span class="material-icons">lens</span>
+              <span>${obs}</span>
+            </div>
+          `).join('');
+        } else {
+          contentDiv.innerHTML = `
+            <div class="observation-item">
+              <span class="material-icons">error_outline</span>
+              <span>情報が見つかりませんでした</span>
+            </div>
+          `;
+        }
+      }, 100);
+    }
+    
+    document.getElementById('appInfoModal').style.display = 'block';
+  } catch (error) {
+    console.error('Error showing app info:', error);
+    addLog(`アプリ情報の取得エラー: ${error.message}`, 'error');
+  }
+}
+
+function closeAppInfoModal() {
+  document.getElementById('appInfoModal').style.display = 'none';
+}
+
+// Check for new apps function
+async function checkForNewApps() {
+  try {
+    const result = await window.windowAPI.checkNewApps();
+    
+    if (result.newAppsFound) {
+      console.log(`新しいアプリが ${result.apps.length} 個見つかりました:`, result.apps);
+      addLog(`新しいアプリを分析しました: ${result.apps.join(', ')}`, 'info');
+      
+      // ウィンドウリストを更新して新しい情報を反映
+      setTimeout(() => {
+        refreshWindowList();
+      }, 1000);
+    }
+  } catch (error) {
+    console.error('新しいアプリのチェックエラー:', error);
+  }
+}
+
+// App Search and Launch functions
+async function searchApps() {
+  const searchInput = document.getElementById("appSearchInput");
+  const query = searchInput.value.trim();
+  const resultsDiv = document.getElementById("appSearchResults");
+  
+  if (!query) {
+    resultsDiv.innerHTML = "";
+    return;
+  }
+  
+  try {
+    // 検索を実行
+    const apps = await window.windowAPI.searchApps(query);
+    
+    if (apps.length === 0) {
+      resultsDiv.innerHTML = `
+        <div class="no-results">
+          <span class="material-icons">search_off</span>
+          <p>"${query}" に一致するアプリケーションが見つかりません</p>
+        </div>
+      `;
+      return;
+    }
+    
+    // 検索結果を表示
+    resultsDiv.innerHTML = apps.map(app => {
+      // アイコンを取得（キャッシュがあればそれを使用）
+      const iconHtml = `
+        <div class="app-search-icon-placeholder">
+          <span class="material-icons">apps</span>
+        </div>
+      `;
+      
+      return `
+        <div class="app-search-item" data-app-name="${app.name}" data-app-path="${app.path}">
+          <div class="app-search-info">
+            ${iconHtml}
+            <div class="app-search-details">
+              <div class="app-search-name">${app.name}</div>
+              ${app.version ? `<div class="app-search-version">バージョン: ${app.version}</div>` : ''}
+            </div>
+          </div>
+          <button class="app-launch-btn" onclick="launchApp('${app.name}', '${app.path}')">
+            <span class="material-icons">launch</span>
+            起動
+          </button>
+        </div>
+      `;
+    }).join('');
+    
+    // アイコンを非同期で読み込む
+    apps.forEach(async app => {
+      try {
+        const icon = await window.windowAPI.getAppIcon(app.name);
+        if (icon) {
+          const appItems = document.querySelectorAll(`[data-app-name="${app.name}"]`);
+          appItems.forEach(item => {
+            const iconPlaceholder = item.querySelector('.app-search-icon-placeholder');
+            if (iconPlaceholder) {
+              iconPlaceholder.outerHTML = `<img src="${icon}" class="app-search-icon" alt="${app.name}">`;
+            }
+          });
+        }
+      } catch (error) {
+        console.error(`Failed to load icon for ${app.name}:`, error);
+      }
+    });
+    
+  } catch (error) {
+    console.error('Search error:', error);
+    resultsDiv.innerHTML = `
+      <div class="no-results">
+        <span class="material-icons">error</span>
+        <p>検索エラー: ${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+async function launchApp(appName, appPath) {
+  try {
+    addLog(`${appName} を起動中...`, "info");
+    
+    const success = await window.windowAPI.launchAppByPath(appPath);
+    
+    if (success) {
+      addLog(`${appName} を起動しました`, "success");
+      
+      // 検索結果をクリア
+      document.getElementById("appSearchInput").value = "";
+      document.getElementById("appSearchResults").innerHTML = "";
+      
+      // 少し待ってからウィンドウリストを更新
+      setTimeout(refreshWindowList, 2000);
+    } else {
+      addLog(`${appName} の起動に失敗しました`, "error");
+    }
+  } catch (error) {
+    addLog(`起動エラー: ${error.message}`, "error");
+  }
+}
+
+// デバウンス関数
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Reset local data function
+async function resetLocalData() {
+  const confirmed = confirm(
+    "ローカルデータをすべて削除してオンボーディングに戻ります。\n\n" +
+    "以下のデータが削除されます:\n" + 
+    "• アプリケーション分析データ\n" +
+    "• オンボーディング完了状態\n\n" +
+    "続行しますか？"
+  );
+  
+  if (!confirmed) return;
+  
+  try {
+    addLog("ローカルデータを削除中...", "info");
+    
+    // IPCでデータ削除を実行
+    const result = await window.windowAPI.resetLocalData();
+    
+    if (result) {
+      addLog("データを削除しました。アプリケーションを再起動しています...", "success");
+      // アプリが自動的に再起動されるため、ここでは何もしない
+    } else {
+      addLog("データ削除に失敗しました", "error");
+    }
+  } catch (error) {
+    console.error('Reset data error:', error);
+    addLog(`リセットエラー: ${error.message}`, "error");
+  }
+}
+
+// Make functions available globally for onclick handlers
+window.cancelCloseAllApps = cancelCloseAllApps;
+window.confirmCloseAllApps = confirmCloseAllApps;
+window.showAppInfo = showAppInfo;
+window.closeAppInfoModal = closeAppInfoModal;
+window.launchApp = launchApp;
+window.resetLocalData = resetLocalData;

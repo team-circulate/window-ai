@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Window AI - オンボーディング</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #fff;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        -webkit-app-region: drag;
+        user-select: none;
+      }
+
+      .container {
+        width: 90%;
+        max-width: 800px;
+        -webkit-app-region: no-drag;
+      }
+
+      h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+
+      .subtitle {
+        font-size: 1.2rem;
+        margin-bottom: 2rem;
+        text-align: center;
+        opacity: 0.9;
+      }
+
+      .apps-container {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 2rem;
+        max-height: 400px;
+        overflow-y: auto;
+        margin-bottom: 2rem;
+      }
+
+      .apps-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: 1rem;
+      }
+
+      .app-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 0.5rem;
+        border-radius: 10px;
+        transition: background 0.3s;
+      }
+
+      .app-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .app-icon {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 0.5rem;
+        border-radius: 10px;
+        object-fit: cover;
+      }
+
+      .app-icon-placeholder {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 0.5rem;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: bold;
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .app-icon-placeholder span {
+        display: block;
+        writing-mode: initial;
+        text-orientation: initial;
+      }
+
+      .app-icon-placeholder.loading span {
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.2;
+        }
+      }
+
+      .app-name {
+        font-size: 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+      }
+
+      .loading-message {
+        text-align: center;
+        padding: 2rem;
+        grid-column: 1 / -1;
+      }
+
+      .loading-message p {
+        writing-mode: initial;
+        text-orientation: initial;
+      }
+
+      .spinner {
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top: 3px solid white;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+        display: block;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .analyze-button {
+        background: linear-gradient(135deg, #06beb6 0%, #48b1bf 100%);
+        color: white;
+        border: none;
+        padding: 1rem 3rem;
+        font-size: 1.2rem;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: transform 0.3s, box-shadow 0.3s;
+        display: block;
+        margin: 0 auto;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+
+      .analyze-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+      }
+
+      .analyze-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .progress-container {
+        margin-top: 2rem;
+        display: none;
+      }
+
+      .progress-bar {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        height: 10px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+      }
+
+      .progress-fill {
+        background: linear-gradient(90deg, #06beb6 0%, #48b1bf 100%);
+        height: 100%;
+        width: 0%;
+        transition: width 0.3s;
+      }
+
+      .progress-text {
+        text-align: center;
+        font-size: 0.9rem;
+        opacity: 0.9;
+      }
+
+      .progress-details {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        opacity: 0.8;
+      }
+
+      .progress-time {
+        color: #a7f3d0;
+        font-weight: 500;
+      }
+
+      .app-count {
+        text-align: center;
+        margin-bottom: 1rem;
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      /* スクロールバースタイル */
+      .apps-container::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .apps-container::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+      }
+
+      .apps-container::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+      }
+
+      .apps-container::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Window AI へようこそ</h1>
+      <p class="subtitle">
+        インストール済みのアプリケーションを分析して、より良い体験を提供します
+      </p>
+
+      <div class="apps-container">
+        <div id="appCount" class="app-count"></div>
+        <div id="appsGrid" class="apps-grid">
+          <div class="loading-message">
+            <div class="spinner"></div>
+            <p>アプリケーションを読み込み中...</p>
+          </div>
+        </div>
+      </div>
+
+      <button id="analyzeBtn" class="analyze-button" disabled>
+        分析を開始
+      </button>
+
+      <div id="progressContainer" class="progress-container">
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+        <p id="progressText" class="progress-text">分析中...</p>
+        <div id="progressDetails" class="progress-details">
+          <span id="progressCount"></span>
+          <span id="progressTime" class="progress-time"></span>
+        </div>
+      </div>
+    </div>
+
+    <script src="onboarding.js"></script>
+  </body>
+</html>

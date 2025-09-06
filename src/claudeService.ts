@@ -10,6 +10,90 @@ export class ClaudeService {
     });
   }
 
+  async generateApplicationDescriptions(appNames: string[]): Promise<Array<{name: string, observations: string[]}>> {
+    try {
+      const prompt = `以下のmacOSアプリケーションについて、それぞれの特徴や用途を2-3個の観察事項として日本語で説明してください。
+      
+      アプリケーションリスト:
+      ${appNames.join(', ')}
+      
+      以下のJSON形式で返してください:
+      [
+        {
+          "name": "アプリ名",
+          "observations": [
+            "観察事項1",
+            "観察事項2",
+            "観察事項3"
+          ]
+        }
+      ]
+      
+      例:
+      [
+        {
+          "name": "Safari",
+          "observations": [
+            "Appleが開発したWebブラウザ",
+            "macOSに標準搭載されている",
+            "プライバシー保護機能が充実している"
+          ]
+        }
+      ]`;
+
+      const response = await this.anthropic.messages.create({
+        model: "claude-3-haiku-20240307",
+        max_tokens: 2000,
+        temperature: 0.3,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      });
+
+      const content = response.content[0];
+      if (content.type === 'text') {
+        try {
+          // Extract JSON from response
+          const jsonMatch = content.text.match(/\[\s*\{[\s\S]*\}\s*\]/); 
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return parsed;
+          }
+        } catch (parseError) {
+          console.error('Error parsing JSON response:', parseError);
+        }
+      }
+
+      // Fallback: return apps with default observations
+      return appNames.map(name => ({
+        name,
+        observations: [this.getDefaultObservation(name)]
+      }));
+
+    } catch (error) {
+      console.error('Error generating app descriptions:', error);
+      return appNames.map(name => ({
+        name,
+        observations: [this.getDefaultObservation(name)]
+      }));
+    }
+  }
+
+  private getDefaultObservation(appName: string): string {
+    const defaults: Record<string, string> = {
+      'Safari': 'Appleが開発したWebブラウザ',
+      'Chrome': 'Googleが開発したWebブラウザ',
+      'VSCode': 'Microsoftが開発したコードエディタ',
+      'Finder': 'macOSのファイル管理アプリケーション',
+      'Terminal': 'コマンドライン操作用のターミナルアプリ',
+      'Slack': 'チームコミュニケーション用のメッセージングアプリ'
+    };
+    return defaults[appName] || `${appName}アプリケーション`;
+  }
+
   async analyzeWindowState(
     currentState: WindowState,
     userIntent: string
