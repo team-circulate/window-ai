@@ -884,6 +884,34 @@ export class WindowManager {
     }
   }
 
+  async focusApp(appName: string): Promise<boolean> {
+    try {
+      const result = await run<boolean>(
+        (appName) => {
+          try {
+            const app = Application(appName);
+            app.activate();
+            
+            // ウィンドウを前面に持ってくる
+            const se = Application("System Events");
+            se.processes[appName].frontmost = true;
+            
+            return true;
+          } catch (err) {
+            console.error(`Error focusing app ${appName}:`, err);
+            return false;
+          }
+        },
+        appName
+      );
+      
+      return result;
+    } catch (error) {
+      console.error("Error in focusApp:", error);
+      return false;
+    }
+  }
+
   async getCpuInfo(): Promise<CpuInfo> {
     try {
       // Node.jsのosモジュールでCPU情報を取得
