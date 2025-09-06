@@ -98,6 +98,12 @@ export interface AIResponse {
   actions: WindowAction[]
   explanation: string
   confidence: number
+  appsToClose?: Array<{
+    appName: string
+    reasons: string[]
+    priority: 'urgent' | 'high' | 'medium' | 'low'
+    expectedBenefit: string
+  }>
 }
 
 // フォーカスログ関連の型定義

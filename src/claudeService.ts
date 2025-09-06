@@ -10,12 +10,14 @@ export class ClaudeService {
     });
   }
 
-  async generateApplicationDescriptions(appNames: string[]): Promise<Array<{name: string, observations: string[]}>> {
+  async generateApplicationDescriptions(
+    appNames: string[]
+  ): Promise<Array<{ name: string; observations: string[] }>> {
     try {
       const prompt = `以下のmacOSアプリケーションについて、それぞれの特徴や用途を2-3個の観察事項として日本語で説明してください。
       
       アプリケーションリスト:
-      ${appNames.join(', ')}
+      ${appNames.join(", ")}
       
       以下のJSON形式で返してください:
       [
@@ -42,68 +44,69 @@ export class ClaudeService {
       ]`;
 
       const response = await this.anthropic.messages.create({
-        model: "claude-3-haiku-20240307",
-        max_tokens: 2000,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 20000,
         temperature: 0.3,
         messages: [
           {
             role: "user",
-            content: prompt
-          }
-        ]
+            content: prompt,
+          },
+        ],
       });
 
       const content = response.content[0];
-      if (content.type === 'text') {
+      if (content.type === "text") {
         try {
           // Extract JSON from response
-          const jsonMatch = content.text.match(/\[\s*\{[\s\S]*\}\s*\]/); 
+          const jsonMatch = content.text.match(/\[\s*\{[\s\S]*\}\s*\]/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
             return parsed;
           }
         } catch (parseError) {
-          console.error('Error parsing JSON response:', parseError);
+          console.error("Error parsing JSON response:", parseError);
         }
       }
 
       // Fallback: return apps with default observations
-      return appNames.map(name => ({
+      return appNames.map((name) => ({
         name,
-        observations: [this.getDefaultObservation(name)]
+        observations: [this.getDefaultObservation(name)],
       }));
-
     } catch (error) {
-      console.error('Error generating app descriptions:', error);
-      return appNames.map(name => ({
+      console.error("Error generating app descriptions:", error);
+      return appNames.map((name) => ({
         name,
-        observations: [this.getDefaultObservation(name)]
+        observations: [this.getDefaultObservation(name)],
       }));
     }
   }
 
   private getDefaultObservation(appName: string): string {
     const defaults: Record<string, string> = {
-      'Safari': 'Appleが開発したWebブラウザ',
-      'Chrome': 'Googleが開発したWebブラウザ',
-      'VSCode': 'Microsoftが開発したコードエディタ',
-      'Finder': 'macOSのファイル管理アプリケーション',
-      'Terminal': 'コマンドライン操作用のターミナルアプリ',
-      'Slack': 'チームコミュニケーション用のメッセージングアプリ'
+      Safari: "Appleが開発したWebブラウザ",
+      Chrome: "Googleが開発したWebブラウザ",
+      VSCode: "Microsoftが開発したコードエディタ",
+      Finder: "macOSのファイル管理アプリケーション",
+      Terminal: "コマンドライン操作用のターミナルアプリ",
+      Slack: "チームコミュニケーション用のメッセージングアプリ",
     };
     return defaults[appName] || `${appName}アプリケーション`;
   }
 
   async analyzeWindowState(
     currentState: WindowState,
-    userIntent: string
+    userIntent: string,
+    processes?: any[]
   ): Promise<AIResponse> {
     const systemPrompt = `You are a window management AI assistant. Your role is to analyze the current window layout and suggest optimal arrangements based on user intent.
 
 You will receive:
 1. Current window state with window IDs, app names, titles, and positions
 2. Display information
-3. User's desired outcome
+3. System resource usage (CPU and memory)
+4. User's desired outcome
 
 CRITICAL RULES FOR WINDOW IDs:
 - Each window has a unique ID in the format "appName-windowTitle"
@@ -128,46 +131,77 @@ Consider:
 - User's workflow and app relationships
 - Screen real estate optimization
 - Maintaining visibility of important windows
-- Ergonomic positioning (frequently used apps more accessible)`;
+- Ergonomic positioning (frequently used apps more accessible)
+- System resource usage (close heavy resource apps if not needed)
+- Apps that may be distracting or unnecessary for current task
 
-    // アイコンデータを除外してコンパクトな状態を作成
+When suggesting apps to close:
+- Only suggest closing apps that are NOT essential for development (VSCode, Cursor, etc.)
+- Consider resource usage (high CPU/memory usage)
+- Consider apps that may distract from the current task
+- Always provide clear reasons for closing each app
+- Prioritize based on urgency (urgent, high, medium, low)
+- Never suggest closing the 'Window AI Manager' itself
+
+OUTPUT BREVITY RULES (critical):
+- Keep each action.reasoning within 60 Japanese characters (短く要点のみ)。
+- Keep overall explanation to a single sentence within 120 Japanese characters.
+- Do not restate input data or list windows again.
+- Prefer minimal action count that still satisfies the intent (上限12件)。`;
+
+    // アイコンデータを除外しつつ短キーで圧縮（トークン削減）
     const compactState = {
-      windows: currentState.windows.map(w => ({
-        id: w.id,
-        appName: w.appName,
-        title: w.title ? w.title.substring(0, 50) : 'Untitled', // タイトルを短縮
-        bounds: w.bounds,
-        isMinimized: w.isMinimized,
-        isFocused: w.isFocused,
-        isVisible: w.isVisible
-        // appIconは除外
+      // w: windows
+      w: currentState.windows.map((win) => ({
+        id: win.id,
+        a: win.appName, // app
+        t: win.title ? win.title.substring(0, 30) : "Untitled", // title(max30)
+        b: [win.bounds.x, win.bounds.y, win.bounds.width, win.bounds.height], // bounds
+        m: win.isMinimized ? 1 : 0,
+        f: win.isFocused ? 1 : 0,
+        v: win.isVisible ? 1 : 0,
       })),
-      displays: currentState.displays,
-      activeApp: currentState.activeApp
-    };
+      // d: displays (最小限)
+      d: currentState.displays.map((dsp) => ({
+        p: dsp.isPrimary ? 1 : 0,
+        b: [dsp.bounds.x, dsp.bounds.y, dsp.bounds.width, dsp.bounds.height],
+      })),
+      a: currentState.activeApp, // active app
+    } as any;
 
-    const userMessage = `Current Window State:
-Windows: ${compactState.windows.length} windows
-Active App: ${compactState.activeApp}
-Displays: ${compactState.displays.length} display(s)
+    // 入力は短キーJSONのみ（改行や装飾なし）
+    const compactProcesses = (processes || []).slice(0, 6).map((p) => ({
+      n: p.name,
+      c: Number(p.cpuUsage?.toFixed(1) || 0),
+      m: Number(p.memoryUsage?.toFixed(0) || 0),
+    }));
 
-Window List (with IDs):
-${compactState.windows.map(w => 
-  `- ID: "${w.id}" | App: ${w.appName} | Title: ${w.title} | Size: ${w.bounds.width}x${w.bounds.height} at ${w.bounds.x},${w.bounds.y}`
-).join('\n')}
-
-User Intent: ${userIntent}
-
-IMPORTANT: When creating window actions, you MUST use the exact window ID from the list above (the value after "ID:").
-The window ID format is "appName-windowTitle" and must be used exactly as shown.
-
-Please analyze and provide window management actions.`;
+    const userMessage = JSON.stringify(
+      {
+        intent: userIntent,
+        state: compactState,
+        proc: compactProcesses,
+        rules: {
+          useExactWindowId: true,
+          windowIdFormat: "appName-windowTitle",
+        },
+      },
+      null,
+      0
+    );
 
     try {
+      // デバッグ: 送信するプロンプト内容
+      console.log("📝 ===== Window Analysis Prompt =====");
+      console.log("System Prompt:", systemPrompt);
+      console.log("User Message:", userMessage);
+      console.log("📝 =================================");
+
+      const startTime = Date.now();
       const response = await this.anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 1000,
-        temperature: 0.3,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 900,
+        temperature: 0.2,
         system: systemPrompt,
         messages: [
           {
@@ -254,6 +288,29 @@ Please analyze and provide window management actions.`;
                   maximum: 1,
                   description: "Confidence level in the suggested actions",
                 },
+                appsToClose: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      appName: { type: "string" },
+                      reasons: { type: "array", items: { type: "string" } },
+                      priority: {
+                        type: "string",
+                        enum: ["urgent", "high", "medium", "low"],
+                      },
+                      expectedBenefit: { type: "string" },
+                    },
+                    required: [
+                      "appName",
+                      "reasons",
+                      "priority",
+                      "expectedBenefit",
+                    ],
+                  },
+                  description:
+                    "Apps that should be closed to optimize performance or focus",
+                },
               },
               required: ["actions", "explanation", "confidence"],
             },
@@ -261,6 +318,21 @@ Please analyze and provide window management actions.`;
         ],
         tool_choice: { type: "tool", name: "window_actions" },
       });
+
+      // デバッグ: トークン使用量と応答時間
+      const endTime = Date.now();
+      const usage: any = (response as any).usage;
+      if (usage) {
+        console.log("🔢 Token Usage:");
+        console.log(`  - Input tokens: ${usage.input_tokens}`);
+        console.log(`  - Output tokens: ${usage.output_tokens}`);
+        console.log(
+          `  - Total tokens: ${
+            (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
+          }`
+        );
+      }
+      console.log(`⏱️ API Response Time: ${endTime - startTime}ms`);
 
       // Extract the tool use response
       const toolUse = response.content.find(
@@ -274,6 +346,7 @@ Please analyze and provide window management actions.`;
           actions: input.actions || [],
           explanation: input.explanation || "No explanation provided",
           confidence: input.confidence || 0.5,
+          appsToClose: input.appsToClose || [],
         };
       }
 
@@ -282,6 +355,7 @@ Please analyze and provide window management actions.`;
         actions: [],
         explanation: "Unable to generate window actions",
         confidence: 0,
+        appsToClose: [],
       };
     } catch (error) {
       console.error("Claude API error:", error);
@@ -346,7 +420,10 @@ Please analyze and provide window management actions.`;
     return actions;
   }
 
-  async analyzeUserProfile(appNames: string[], appDescriptions: Array<{name: string, observations: string[]}>): Promise<{
+  async analyzeUserProfile(
+    appNames: string[],
+    appDescriptions: Array<{ name: string; observations: string[] }>
+  ): Promise<{
     userType: string;
     characteristics: string[];
     recommendations: string[];
@@ -365,7 +442,7 @@ Please analyze and provide window management actions.`;
 `;
 
     const userMessage = `
-アプリケーション一覧: ${appNames.join(', ')}
+アプリケーション一覧: ${appNames.join(", ")}
 
 アプリケーション詳細:
 ${JSON.stringify(appDescriptions, null, 2)}
@@ -378,37 +455,45 @@ ${JSON.stringify(appDescriptions, null, 2)}
         temperature: 0.4,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-        tools: [{
-          name: "analyze_user_profile",
-          description: "Analyze user profile from installed applications",
-          input_schema: {
-            type: "object",
-            properties: {
-              userType: {
-                type: "string",
-                description: "Primary user type or role (e.g., '開発者', 'デザイナー', 'ビジネスパーソン')"
+        tools: [
+          {
+            name: "analyze_user_profile",
+            description: "Analyze user profile from installed applications",
+            input_schema: {
+              type: "object",
+              properties: {
+                userType: {
+                  type: "string",
+                  description:
+                    "Primary user type or role (e.g., '開発者', 'デザイナー', 'ビジネスパーソン')",
+                },
+                characteristics: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Key characteristics and traits",
+                },
+                recommendations: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Actionable recommendations for improvement",
+                },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                  description: "Confidence in the analysis",
+                },
               },
-              characteristics: {
-                type: "array",
-                items: { type: "string" },
-                description: "Key characteristics and traits"
-              },
-              recommendations: {
-                type: "array",
-                items: { type: "string" },
-                description: "Actionable recommendations for improvement"
-              },
-              confidence: {
-                type: "number",
-                minimum: 0,
-                maximum: 1,
-                description: "Confidence in the analysis"
-              }
+              required: [
+                "userType",
+                "characteristics",
+                "recommendations",
+                "confidence",
+              ],
             },
-            required: ["userType", "characteristics", "recommendations", "confidence"]
-          }
-        }],
-        tool_choice: { type: "tool", name: "analyze_user_profile" }
+          },
+        ],
+        tool_choice: { type: "tool", name: "analyze_user_profile" },
       });
 
       const toolUse = response.content.find(
@@ -421,7 +506,7 @@ ${JSON.stringify(appDescriptions, null, 2)}
           userType: "一般ユーザー",
           characteristics: ["様々なアプリを活用"],
           recommendations: ["より効率的な作業環境の構築を検討してみてください"],
-          confidence: 0.3
+          confidence: 0.3,
         };
       }
 
@@ -432,7 +517,11 @@ ${JSON.stringify(appDescriptions, null, 2)}
     }
   }
 
-  async generateWorkflowSuggestions(userProfile: any, appNames: string[], appDescriptions: Array<{name: string, observations: string[]}>): Promise<{
+  async generateWorkflowSuggestions(
+    userProfile: any,
+    appNames: string[],
+    appDescriptions: Array<{ name: string; observations: string[] }>
+  ): Promise<{
     workflows: Array<{
       name: string;
       description: string;
@@ -469,7 +558,7 @@ ${JSON.stringify(appDescriptions, null, 2)}
 ユーザープロフィール:
 ${JSON.stringify(userProfile, null, 2)}
 
-利用可能なアプリケーション: ${appNames.join(', ')}
+利用可能なアプリケーション: ${appNames.join(", ")}
 
 アプリケーション詳細:
 ${JSON.stringify(appDescriptions, null, 2)}
@@ -484,50 +573,59 @@ ${JSON.stringify(appDescriptions, null, 2)}
         temperature: 0.4,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-        tools: [{
-          name: "generate_workflows",
-          description: "Generate workflow suggestions based on user profile and apps",
-          input_schema: {
-            type: "object",
-            properties: {
-              workflows: {
-                type: "array",
-                maxItems: 3,
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    description: { type: "string" },
-                    apps: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          appName: { type: "string" },
-                          role: { type: "string" },
-                          reasoning: { type: "string" }
+        tools: [
+          {
+            name: "generate_workflows",
+            description:
+              "Generate workflow suggestions based on user profile and apps",
+            input_schema: {
+              type: "object",
+              properties: {
+                workflows: {
+                  type: "array",
+                  maxItems: 3,
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      description: { type: "string" },
+                      apps: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            appName: { type: "string" },
+                            role: { type: "string" },
+                            reasoning: { type: "string" },
+                          },
+                          required: ["appName", "role", "reasoning"],
                         },
-                        required: ["appName", "role", "reasoning"]
-                      }
+                      },
+                      tips: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      confidence: {
+                        type: "number",
+                        minimum: 0,
+                        maximum: 1,
+                      },
                     },
-                    tips: {
-                      type: "array",
-                      items: { type: "string" }
-                    },
-                    confidence: {
-                      type: "number",
-                      minimum: 0,
-                      maximum: 1
-                    }
+                    required: [
+                      "name",
+                      "description",
+                      "apps",
+                      "tips",
+                      "confidence",
+                    ],
                   },
-                  required: ["name", "description", "apps", "tips", "confidence"]
-                }
-              }
+                },
+              },
+              required: ["workflows"],
             },
-            required: ["workflows"]
-          }
-        }],
-        tool_choice: { type: "tool", name: "generate_workflows" }
+          },
+        ],
+        tool_choice: { type: "tool", name: "generate_workflows" },
       });
 
       const toolUse = response.content.find(
@@ -546,7 +644,10 @@ ${JSON.stringify(appDescriptions, null, 2)}
     }
   }
 
-  async generateOptimalLayouts(userProfile: any, appNames: string[]): Promise<{
+  async generateOptimalLayouts(
+    userProfile: any,
+    appNames: string[]
+  ): Promise<{
     layouts: Array<{
       name: string;
       description: string;
@@ -587,7 +688,7 @@ macOSの標準的なディスプレイサイズ（1440x900）を基準に、実�
 ユーザープロフィール:
 ${JSON.stringify(userProfile, null, 2)}
 
-利用可能なアプリケーション: ${appNames.join(', ')}
+利用可能なアプリケーション: ${appNames.join(", ")}
 
 メインアプリ（頻繁に使用されそうなもの）を中心に、3つのレイアウトパターンを提案してください。
 `;
@@ -599,66 +700,68 @@ ${JSON.stringify(userProfile, null, 2)}
         temperature: 0.3,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-        tools: [{
-          name: "generate_layouts",
-          description: "Generate optimal window layouts",
-          input_schema: {
-            type: "object",
-            properties: {
-              layouts: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    description: { type: "string" },
-                    reasoning: { type: "string" },
-                    preset: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string" },
-                        description: { type: "string" },
-                        windows: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              appName: { type: "string" },
-                              position: {
-                                type: "object",
-                                properties: {
-                                  x: { type: "number" },
-                                  y: { type: "number" }
-                                }
+        tools: [
+          {
+            name: "generate_layouts",
+            description: "Generate optimal window layouts",
+            input_schema: {
+              type: "object",
+              properties: {
+                layouts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      description: { type: "string" },
+                      reasoning: { type: "string" },
+                      preset: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" },
+                          windows: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                appName: { type: "string" },
+                                position: {
+                                  type: "object",
+                                  properties: {
+                                    x: { type: "number" },
+                                    y: { type: "number" },
+                                  },
+                                },
+                                size: {
+                                  type: "object",
+                                  properties: {
+                                    width: { type: "number" },
+                                    height: { type: "number" },
+                                  },
+                                },
                               },
-                              size: {
-                                type: "object",
-                                properties: {
-                                  width: { type: "number" },
-                                  height: { type: "number" }
-                                }
-                              }
+                              required: ["appName", "position", "size"],
                             },
-                            required: ["appName", "position", "size"]
-                          }
-                        }
+                          },
+                        },
+                        required: ["name", "description", "windows"],
                       },
-                      required: ["name", "description", "windows"]
-                    }
+                    },
+                    required: ["name", "description", "reasoning", "preset"],
                   },
-                  required: ["name", "description", "reasoning", "preset"]
-                }
+                },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                },
               },
-              confidence: {
-                type: "number",
-                minimum: 0,
-                maximum: 1
-              }
+              required: ["layouts", "confidence"],
             },
-            required: ["layouts", "confidence"]
-          }
-        }],
-        tool_choice: { type: "tool", name: "generate_layouts" }
+          },
+        ],
+        tool_choice: { type: "tool", name: "generate_layouts" },
       });
 
       const toolUse = response.content.find(
@@ -669,7 +772,7 @@ ${JSON.stringify(userProfile, null, 2)}
       if (!toolUse) {
         return {
           layouts: [],
-          confidence: 0
+          confidence: 0,
         };
       }
 
@@ -680,7 +783,10 @@ ${JSON.stringify(userProfile, null, 2)}
     }
   }
 
-  async suggestAppsForTask(userPrompt: string, applicationGraph: any[]): Promise<{
+  async suggestAppsForTask(
+    userPrompt: string,
+    applicationGraph: any[]
+  ): Promise<{
     highConfidence: string[];
     lowConfidence: string[];
     reasoning: string;
@@ -713,8 +819,8 @@ ${JSON.stringify(applicationGraph, null, 2)}
 
     try {
       const response = await this.anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 1000,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 20000,
         temperature: 0.3,
         system: systemPrompt,
         messages: [

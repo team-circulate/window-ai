@@ -146,7 +146,7 @@ async function createWindow(loadOnboarding: boolean = false) {
   if (loadOnboarding) {
     mainWindow.loadFile(path.join(__dirname, "../public/onboarding.html"));
     // オンボーディング時は即座に表示
-    mainWindow.once('ready-to-show', () => {
+    mainWindow.once("ready-to-show", () => {
       mainWindow?.show();
       mainWindow?.focus();
     });
@@ -483,18 +483,7 @@ app.whenReady().then(async () => {
   // オンボーディング状態をチェック
   const needsOnboarding = true; // 強制的にオンボーディングを表示
 
-  // メインウィンドウとトレイを作成
-  createWindow(needsOnboarding);
-  createTray();
-
-  // トレイアニメーションのプリロードと開始
-  trayAnimFrames = loadTrayAnimFrames();
-  if (trayAnimFrames.length > 0) {
-    startTrayAnimation();
-    startMemoryMonitoring();
-  } else {
-    console.warn("No tray animation frames found (pen1..pen5).");
-  }
+  // IPCハンドラ登録を先に行うため、ウィンドウ作成は後段に移動
 
   // グローバルホットキーの登録
   // Command+M でメインウィンドウの表示/非表示を切り替え
@@ -772,7 +761,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(
     "analyze-windows",
-    async (_, userIntent: string): Promise<WindowAction[]> => {
+    async (_, userIntent: string): Promise<any> => {
       console.log("Analyzing windows with intent:", userIntent);
       const currentState = await windowManager.getWindowState();
       console.log(`Found ${currentState.windows.length} windows`);
@@ -785,7 +774,8 @@ app.whenReady().then(async () => {
       console.log("AI Response:", response);
       console.log("Actions to execute:", response.actions);
 
-      return response.actions;
+      // レンダラー側は { actions, appsToClose?, explanation? } を期待
+      return response;
     }
   );
 
@@ -806,6 +796,82 @@ app.whenReady().then(async () => {
       return result;
     }
   );
+
+  // AI最適化分析のIPCハンドラー
+  ipcMain.handle("get-ai-optimization", async () => {
+    console.log("🤖 Getting AI optimization recommendations...");
+
+    if (!analysisService || !focusLogger || !windowManager) {
+      console.log("⚠️ Analysis services not ready");
+      return null;
+    }
+
+    try {
+      // 1. フォーカス統計を取得
+      const focusStats = await focusLogger.getAllStats();
+      const validFocusStats = focusStats.filter(
+        (stat: any) =>
+          stat.appName !== null &&
+          stat.appName !== "" &&
+          stat.totalFocusTime > 0
+      );
+
+      // 2. CPU情報を取得
+      const cpuInfo = await windowManager.getCpuInfo();
+      const processes = cpuInfo.processes || [];
+
+      // 3. 現在のアプリ一覧を取得
+      const windowState = await windowManager.getWindowState();
+      const currentApps = [
+        ...new Set(windowState.windows.map((w) => w.appName)),
+      ];
+
+      // 4. フォーカス分析
+      const focusAnalysis = await analysisService.analyzeFocusPatterns(
+        validFocusStats
+      );
+
+      // 5. リソース分析
+      const resourceAnalysis = await analysisService.analyzeResourceUsage(
+        processes
+      );
+
+      // 6. 統合分析で閉じるべきアプリを特定
+      const recommendations =
+        await analysisService.getIntegratedRecommendations(
+          focusAnalysis,
+          resourceAnalysis,
+          currentApps
+        );
+
+      // appsToCloseが配列であることを確認
+      const appsToClose = Array.isArray(recommendations.appsToClose)
+        ? recommendations.appsToClose
+        : [];
+
+      console.log(
+        `✅ AI optimization analysis complete: ${appsToClose.length} apps recommended to close`
+      );
+
+      return {
+        ...recommendations,
+        appsToClose: appsToClose,
+      };
+    } catch (error) {
+      console.error("❌ AI optimization analysis error:", error);
+      return null;
+    }
+  });
+
+  // アプリを終了するIPCハンドラー
+  ipcMain.handle("quit-app", async (_, appName: string): Promise<boolean> => {
+    try {
+      return await windowManager.quitApp(appName);
+    } catch (error) {
+      console.error(`Error quitting app ${appName}:`, error);
+      return false;
+    }
+  });
 
   ipcMain.handle(
     "execute-actions",
@@ -848,10 +914,7 @@ app.whenReady().then(async () => {
     }
   );
 
-  ipcMain.handle("quit-app", async (_, appName: string): Promise<boolean> => {
-    console.log(`Quit app request: ${appName}`);
-    return await windowManager.quitApp(appName);
-  });
+  // 重複登録を避けるため、'quit-app' のハンドラは1箇所に統一
 
   ipcMain.handle(
     "get-cpu-info",
@@ -1228,22 +1291,37 @@ app.whenReady().then(async () => {
     }
   });
 
+  // メインウィンドウとトレイを作成（IPC登録後に実行）
+  createWindow(needsOnboarding);
+  createTray();
+
+  // トレイアニメーションのプリロードと開始
+  trayAnimFrames = loadTrayAnimFrames();
+  if (trayAnimFrames.length > 0) {
+    startTrayAnimation();
+    startMemoryMonitoring();
+  } else {
+    console.warn("No tray animation frames found (pen1..pen5).");
+  }
   // ユーザープロフィール分析
   ipcMain.handle("analyze-user-profile", async () => {
     try {
       console.log("🔍 Analyzing user profile...");
-      
+
       // インストール済みアプリを取得
       const installedApps = await appScanner.getAllInstalledApps();
-      const appNames = installedApps.map(app => app.name);
-      
+      const appNames = installedApps.map((app) => app.name);
+
       // アプリの説明を取得（GraphManagerから）
       const appDescriptions = graphManager.getAllApplications();
-      
+
       // ユーザープロフィールを分析
-      const profile = await claudeService.analyzeUserProfile(appNames, appDescriptions);
+      const profile = await claudeService.analyzeUserProfile(
+        appNames,
+        appDescriptions
+      );
       console.log("✅ User profile analysis complete:", profile.userType);
-      
+
       return profile;
     } catch (error) {
       console.error("❌ User profile analysis error:", error);
@@ -1255,17 +1333,23 @@ app.whenReady().then(async () => {
   ipcMain.handle("generate-optimal-layouts", async () => {
     try {
       console.log("🎯 Generating optimal layouts...");
-      
+
       // まずユーザープロフィールを取得
       const installedApps = await appScanner.getAllInstalledApps();
-      const appNames = installedApps.map(app => app.name);
+      const appNames = installedApps.map((app) => app.name);
       const appDescriptions = graphManager.getAllApplications();
-      const userProfile = await claudeService.analyzeUserProfile(appNames, appDescriptions);
-      
+      const userProfile = await claudeService.analyzeUserProfile(
+        appNames,
+        appDescriptions
+      );
+
       // 最適レイアウトを生成
-      const layouts = await claudeService.generateOptimalLayouts(userProfile, appNames);
+      const layouts = await claudeService.generateOptimalLayouts(
+        userProfile,
+        appNames
+      );
       console.log(`✅ Generated ${layouts.layouts.length} optimal layouts`);
-      
+
       return layouts;
     } catch (error) {
       console.error("❌ Layout generation error:", error);
@@ -1277,26 +1361,33 @@ app.whenReady().then(async () => {
   ipcMain.handle("get-user-analysis", async () => {
     try {
       console.log("🔬 Performing comprehensive user analysis...");
-      
+
       const installedApps = await appScanner.getAllInstalledApps();
-      const appNames = installedApps.map(app => app.name);
+      const appNames = installedApps.map((app) => app.name);
       const appDescriptions = graphManager.getAllApplications();
-      
+
       // 段階的に分析を実行（ユーザープロフィールが他の分析に必要なため）
       console.log("📊 Step 1: Analyzing user profile...");
-      const userProfile = await claudeService.analyzeUserProfile(appNames, appDescriptions);
-      
+      const userProfile = await claudeService.analyzeUserProfile(
+        appNames,
+        appDescriptions
+      );
+
       console.log("🔧 Step 2: Generating workflows and layouts...");
       const [workflows, optimalLayouts] = await Promise.all([
-        claudeService.generateWorkflowSuggestions(userProfile, appNames, appDescriptions),
-        claudeService.generateOptimalLayouts(userProfile, appNames)
+        claudeService.generateWorkflowSuggestions(
+          userProfile,
+          appNames,
+          appDescriptions
+        ),
+        claudeService.generateOptimalLayouts(userProfile, appNames),
       ]);
-      
+
       console.log("✅ Comprehensive analysis complete");
       return {
         profile: userProfile,
         workflows: workflows,
-        layouts: optimalLayouts
+        layouts: optimalLayouts,
       };
     } catch (error) {
       console.error("❌ Comprehensive analysis error:", error);

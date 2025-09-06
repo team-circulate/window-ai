@@ -11,14 +11,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 新しいアプリをチェック
   checkForNewApps();
 
-  // リアルタイムアクティブアプリ更新のリスナー
-  if (window.windowAPI.onActiveAppChanged) {
-    window.windowAPI.onActiveAppChanged((appName) => {
-      console.log("Real-time active app update:", appName);
-      displayActiveApp(appName);
-    });
-  }
-
   // Event listeners
   document
     .getElementById("analyzeBtn")
@@ -129,12 +121,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     .getElementById("statsRefreshBtn")
     .addEventListener("click", loadFocusStatistics);
 
-  // Quick action buttons
+  // Quick action buttons - AI最適化ダイアログと連携
   document.querySelectorAll(".quick-action").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const intent = e.target.getAttribute("data-intent");
-      document.getElementById("userIntent").value = intent;
-      analyzeAndExecute();
+    btn.addEventListener("click", async (e) => {
+      // ボタンまたはその子要素から data-intent を取得
+      let target = e.target;
+      let intent = target.getAttribute("data-intent");
+
+      // 子要素（アイコンなど）がクリックされた場合、親のボタンから取得
+      if (!intent && target.parentElement) {
+        intent = target.parentElement.getAttribute("data-intent");
+      }
+
+      if (intent) {
+        // 入力欄に値を設定
+        document.getElementById("userIntent").value = intent;
+        // ダイアログ表示付きで実行
+        await analyzeAndExecute();
+      }
     });
   });
 
@@ -375,50 +379,150 @@ async function bulkAction(kind) {
   }
 }
 
-async function analyzeAndExecute() {
-  const userIntent = document.getElementById("userIntent").value.trim();
+// ウィンドウアクションからレイアウト情報を抽出
+function extractLayoutFromActions(actions) {
+  const layoutInfo = [];
 
-  if (!userIntent) {
-    addLog("意図を入力してください", "error");
+  for (const action of actions) {
+    if (action.type === "arrange") {
+      // 複数ウィンドウの配置
+      if (action.targetWindows && Array.isArray(action.targetWindows)) {
+        const arrangement = action.parameters?.arrangement || "unknown";
+        let position = "";
+
+        switch (arrangement) {
+          case "tile-left":
+            position = "画面左側";
+            break;
+          case "tile-right":
+            position = "画面右側";
+            break;
+          case "tile-grid":
+            position = "グリッド配置";
+            break;
+          default:
+            position = arrangement;
+        }
+
+        for (const window of action.targetWindows) {
+          const appName = window.split("-")[0]; // "Cursor-types.ts" → "Cursor"
+          layoutInfo.push({
+            appName: appName,
+            position: position,
+            reason: action.reasoning || "効率的な作業環境のため",
+          });
+        }
+      }
+    } else if (action.type === "move") {
+      // 単一ウィンドウの移動
+      const appName = action.targetWindow.split("-")[0];
+      const pos = action.parameters?.position;
+      let position = pos ? `位置(${pos.x}, ${pos.y})` : "指定位置";
+
+      layoutInfo.push({
+        appName: appName,
+        position: position,
+        reason: action.reasoning || "配置の最適化",
+      });
+    }
+  }
+
+  return layoutInfo.length > 0 ? layoutInfo : undefined;
+}
+
+async function analyzeAndExecute() {
+  const inputElement = document.getElementById("userIntent");
+  if (!inputElement) {
+    console.error("userIntent input element not found!");
     return;
   }
 
-  const analyzeBtn = document.getElementById("analyzeBtn");
-  analyzeBtn.disabled = true;
-  analyzeBtn.textContent = "処理中...";
+  const userIntent = inputElement.value ? inputElement.value.trim() : "";
 
-  try {
-    addLog(`AI分析中: "${userIntent}"`, "info");
+  // ユーザーが意図を入力した場合は配置提案＋最適化提案
+  if (userIntent !== "" && userIntent.length > 0) {
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    analyzeBtn.disabled = true;
+    analyzeBtn.innerHTML =
+      '<span class="material-icons">hourglass_empty</span> AI分析中...';
 
-    const actions = await window.windowAPI.analyzeWindows(userIntent);
+    try {
+      addLog(`AI分析中: "${userIntent}"`, "info");
 
-    if (actions.length === 0) {
-      addLog("実行可能なアクションがありません", "error");
-      return;
+      // ウィンドウ配置の提案と最適化提案を1回のAPIコールで取得
+      const response = await window.windowAPI.analyzeWindows(userIntent);
+
+      if (!response || !response.actions || response.actions.length === 0) {
+        addLog("実行可能なアクションがありません", "error");
+        return;
+      }
+
+      const actions = response.actions;
+      const optimizations = response.appsToClose || [];
+
+      // アクションから最小化対象のアプリを抽出
+      const minimizeApps = [];
+      for (const action of actions) {
+        if (action.type === "minimize") {
+          const appName = action.targetWindow.split("-")[0];
+          minimizeApps.push({
+            appName: appName,
+            reasons: [action.reasoning || "作業に不要なため最小化"],
+            priority: "medium",
+            expectedBenefit: "集中力の向上",
+            safeToClose: true,
+          });
+        }
+      }
+
+      // 統合した提案をダイアログで表示
+      const combinedRecommendations = {
+        userIntent: userIntent,
+        windowActions: actions,
+        systemHealthScore: 85, // デフォルト値
+        overallAssessment:
+          response.explanation ||
+          `ウィンドウを最適化して、作業環境を改善します。`,
+        appsToClose: [...optimizations, ...minimizeApps],
+        windowLayout: extractLayoutFromActions(actions),
+      };
+
+      showAIOptimizationDialog(combinedRecommendations);
+    } catch (error) {
+      addLog(`エラー: ${error.message}`, "error");
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.innerHTML =
+        '<span class="material-icons">auto_fix_high</span> 分析・実行';
     }
+  } else {
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    analyzeBtn.disabled = true;
+    analyzeBtn.innerHTML =
+      '<span class="material-icons">hourglass_empty</span> AI分析中...';
 
-    addLog(`${actions.length}個のアクションを実行`, "info");
+    try {
+      addLog("AI最適化分析を実行中...", "info");
 
-    for (const action of actions) {
-      addLog(`実行: ${action.type} - ${action.reasoning}`, "info");
+      const recommendations = await window.windowAPI.getAIOptimization();
+
+      if (!recommendations) {
+        addLog("分析サービスが利用できません", "error");
+        return;
+      }
+
+      // AI最適化ダイアログを表示
+      showAIOptimizationDialog(recommendations);
+
+      // 入力欄をクリア
+      document.getElementById("userIntent").value = "";
+    } catch (error) {
+      addLog(`分析エラー: ${error.message}`, "error");
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.innerHTML =
+        '<span class="material-icons">auto_fix_high</span> 分析・実行';
     }
-
-    const results = await window.windowAPI.executeActions(actions);
-
-    const successCount = results.filter((r) => r).length;
-    if (successCount === results.length) {
-      addLog("すべてのアクションが正常に完了しました", "success");
-    } else {
-      addLog(`${successCount}/${results.length}個のアクションが完了`, "error");
-    }
-
-    // Refresh window list after actions
-    setTimeout(refreshWindowList, 500);
-  } catch (error) {
-    addLog(`エラー: ${error.message}`, "error");
-  } finally {
-    analyzeBtn.disabled = false;
-    analyzeBtn.textContent = "分析・実行";
   }
 }
 
@@ -855,10 +959,6 @@ async function checkForNewApps() {
     const result = await window.windowAPI.checkNewApps();
 
     if (result.newAppsFound) {
-      console.log(
-        `新しいアプリが ${result.apps.length} 個見つかりました:`,
-        result.apps
-      );
       addLog(`新しいアプリを分析しました: ${result.apps.join(", ")}`, "info");
 
       // ウィンドウリストを更新して新しい情報を反映
@@ -1041,7 +1141,7 @@ async function loadPresets() {
 
     if (presets.length === 0) {
       presetList.innerHTML = `
-        <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">
+        <div style="text-align: center; padding: 20px; color: #6b7280;">
           <span class="material-icons" style="font-size: 48px;">bookmark_border</span>
           <p>プリセットがありません</p>
           <p style="font-size: 12px;">現在のウィンドウ配置を保存してください</p>
@@ -1428,8 +1528,6 @@ async function initializeStatistics() {
       loadFocusStatistics();
       loadDataInfo();
     }, 5 * 60 * 1000);
-
-    console.log("📊 Statistics initialized");
   } catch (error) {
     console.error("Error initializing statistics:", error);
   }
@@ -1437,12 +1535,9 @@ async function initializeStatistics() {
 
 async function loadFocusStatistics() {
   try {
-    console.log("🔄 Loading focus statistics...");
     const timeRange = document.getElementById("timeRange").value;
-    console.log("Selected time range:", timeRange);
 
     const stats = await window.windowAPI.getFocusStats();
-    console.log("Raw stats from API:", stats);
 
     // 統計データを使用時間順にソート
     const sortedStats = stats.sort(
@@ -1457,7 +1552,6 @@ async function loadFocusStatistics() {
       const today = new Date().toISOString().split("T")[0];
       const todayStart = new Date(today).getTime();
       filteredStats = sortedStats.filter((stat) => stat.lastUsed > todayStart);
-      console.log("Today filtered stats:", filteredStats);
     } else if (timeRange === "week") {
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       filteredStats = sortedStats.filter(
@@ -1469,8 +1563,6 @@ async function loadFocusStatistics() {
         (stat) => stat.lastUsed > monthAgo.getTime()
       );
     }
-
-    console.log("Final filtered stats:", filteredStats);
 
     displayStatisticsSummary(filteredStats);
     displayFocusChart(filteredStats);
@@ -1747,7 +1839,6 @@ async function initializeNotifications() {
     // リアルタイム通知リスナー
     if (window.windowAPI.onNewAnalysisNotification) {
       window.windowAPI.onNewAnalysisNotification((notification) => {
-        console.log("New notification received:", notification);
         // 通知履歴を再読み込み
         loadNotifications();
       });
@@ -1756,8 +1847,6 @@ async function initializeNotifications() {
     // 初期データを読み込み
     await loadNotifications();
     await loadNotificationsSummary();
-
-    console.log("📢 Notifications system initialized");
   } catch (error) {
     console.error("Error initializing notifications:", error);
   }
@@ -1959,12 +2048,327 @@ async function saveNotificationSettings() {
 
     if (success) {
       closeSettingsModal();
-      console.log("Settings saved successfully");
     } else {
       alert("設定の保存に失敗しました");
     }
   } catch (error) {
     console.error("Error saving settings:", error);
     alert("設定の保存中にエラーが発生しました");
+  }
+}
+
+// AI Optimization Dialog Functions
+let currentOptimizationRecommendations = null;
+let selectedAppsToClose = new Set();
+
+// デバッグ用: 手動でダイアログを表示
+window.testShowDialog = function () {
+  const testData = {
+    systemHealthScore: 75,
+    overallAssessment: "テストデータです。",
+    appsToClose: [
+      {
+        appName: "TestApp",
+        reasons: ["テスト理由1", "テスト理由2"],
+        priority: "medium",
+        expectedBenefit: "テスト効果",
+        safeToClose: true,
+      },
+    ],
+    windowLayout: [
+      {
+        appName: "TestApp",
+        position: "画面左半分",
+        reason: "テスト配置理由",
+      },
+    ],
+  };
+  showAIOptimizationDialog(testData);
+};
+
+function showAIOptimizationDialog(recommendations) {
+  // ダイアログ要素の存在確認
+  const dialogElement = document.getElementById("aiOptimizationDialog");
+  if (!dialogElement) {
+    console.error("ERROR: aiOptimizationDialog element not found in DOM!");
+    // ダイアログが存在しない場合、代替案として通常のアラートを表示
+    alert(
+      `AI最適化提案:\n\nシステム健康度: ${
+        recommendations.systemHealthScore
+      }/100\n\n${recommendations.overallAssessment}\n\n閉じるべきアプリ: ${
+        recommendations.appsToClose?.map((a) => a.appName).join(", ") || "なし"
+      }`
+    );
+    return;
+  }
+
+  currentOptimizationRecommendations = recommendations;
+  selectedAppsToClose.clear();
+
+  // Update system health score
+  const scoreElement = document.getElementById("systemHealthScore");
+  const scoreBar = document.getElementById("healthScoreBar");
+  scoreElement.textContent = `${recommendations.systemHealthScore}/100`;
+  scoreBar.style.width = `${recommendations.systemHealthScore}%`;
+
+  // Update bar color based on score
+  if (recommendations.systemHealthScore >= 80) {
+    scoreBar.style.background =
+      "linear-gradient(90deg, #4ade80 0%, #22c55e 100%)";
+  } else if (recommendations.systemHealthScore >= 60) {
+    scoreBar.style.background =
+      "linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)";
+  } else {
+    scoreBar.style.background =
+      "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)";
+  }
+
+  // Update overall assessment
+  let assessmentHtml = recommendations.overallAssessment;
+
+  // ユーザーの意図がある場合は先頭に表示
+  if (recommendations.userIntent) {
+    assessmentHtml =
+      `<div style="margin-bottom: 10px; padding: 10px; background: rgba(255, 255, 255, 0.08); border-radius: 6px">
+      <strong style="color: #4ade80">📝 あなたのリクエスト:</strong><br/>
+      「${recommendations.userIntent}」
+    </div>` + assessmentHtml;
+  }
+
+  document.getElementById("overallAssessment").innerHTML = assessmentHtml;
+
+  // Check if there are window layout recommendations
+  if (recommendations.windowLayout && recommendations.windowLayout.length > 0) {
+    const layoutSection = document.getElementById("windowLayoutSection");
+    const layoutContainer = document.getElementById("layoutRecommendations");
+
+    layoutContainer.innerHTML = recommendations.windowLayout
+      .map(
+        (layout) => `
+      <div style="margin-bottom: 8px; padding: 8px; background: rgba(255, 255, 255, 0.03); border-radius: 6px">
+        <div style="display: flex; align-items: center; margin-bottom: 4px">
+          <span class="material-icons" style="font-size: 16px; margin-right: 6px; color: #06beb6">apps</span>
+          <strong style="font-size: 14px">${layout.appName}</strong>
+        </div>
+        <div style="margin-left: 22px; font-size: 13px; opacity: 0.9">
+          ${layout.position} - ${layout.reason}
+        </div>
+      </div>
+    `
+      )
+      .join("");
+
+    layoutSection.style.display = "block";
+  } else {
+    document.getElementById("windowLayoutSection").style.display = "none";
+  }
+
+  // Update apps to close list with checkboxes
+  const appsContainer = document.getElementById("appsRecommendations");
+  if (recommendations.appsToClose && recommendations.appsToClose.length > 0) {
+    // Initialize all apps as selected
+    recommendations.appsToClose.forEach((app) => {
+      selectedAppsToClose.add(app.appName);
+    });
+
+    appsContainer.innerHTML = recommendations.appsToClose
+      .map((app, index) => {
+        const priorityColors = {
+          urgent: "#ef4444",
+          high: "#f59e0b",
+          medium: "#fbbf24",
+          low: "#6b7280",
+        };
+
+        return `
+        <div style="margin-bottom: 12px; padding: 12px; background: rgba(255, 255, 255, 0.05); border-radius: 8px; border-left: 3px solid ${
+          priorityColors[app.priority]
+        }">
+          <div style="display: flex; justify-content: space-between; align-items: start">
+            <label style="flex: 1; display: flex; align-items: start; cursor: pointer">
+              <input type="checkbox" 
+                     id="app-checkbox-${index}" 
+                     data-app-name="${app.appName}"
+                     style="margin-right: 10px; margin-top: 2px" 
+                     checked
+                     onchange="toggleAppSelection('${
+                       app.appName
+                     }', this.checked)">
+              <div style="flex: 1">
+                <div style="font-weight: 600; margin-bottom: 4px">
+                  ${app.appName}
+                  <span style="font-size: 11px; opacity: 0.7; margin-left: 8px">[${
+                    app.priority === "urgent"
+                      ? "緊急"
+                      : app.priority === "high"
+                      ? "高"
+                      : app.priority === "medium"
+                      ? "中"
+                      : "低"
+                  }]</span>
+                </div>
+                <div style="font-size: 12px; opacity: 0.8; margin-bottom: 4px">
+                  ${app.reasons.join(", ")}
+                </div>
+                <div style="font-size: 11px; opacity: 0.6">
+                  期待される効果: ${app.expectedBenefit}
+                </div>
+              </div>
+            </label>
+            ${
+              app.safeToClose
+                ? '<span class="material-icons" style="color: #4ade80; font-size: 16px; margin-left: 8px" title="安全に閉じることができます">verified</span>'
+                : '<span class="material-icons" style="color: #fbbf24; font-size: 16px; margin-left: 8px" title="注意が必要">warning</span>'
+            }
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+
+    document.getElementById("appsToCloseList").style.display = "block";
+
+    // Set up select all checkbox
+    const selectAllCheckbox = document.getElementById("selectAllApps");
+    selectAllCheckbox.checked = true;
+    selectAllCheckbox.onchange = function () {
+      const checkboxes = appsContainer.querySelectorAll(
+        'input[type="checkbox"]'
+      );
+      checkboxes.forEach((cb) => {
+        cb.checked = this.checked;
+        const appName = cb.getAttribute("data-app-name");
+        if (this.checked) {
+          selectedAppsToClose.add(appName);
+        } else {
+          selectedAppsToClose.delete(appName);
+        }
+      });
+    };
+  } else {
+    appsContainer.innerHTML =
+      '<div style="padding: 12px; text-align: center; opacity: 0.6">閉じるべきアプリはありません</div>';
+    document.getElementById("appsToCloseList").style.display = "none";
+  }
+
+  // Show dialog
+  const dialog = document.getElementById("aiOptimizationDialog");
+  if (dialog) {
+    dialog.style.display = "block";
+  } else {
+    console.error("AI optimization dialog element not found!");
+  }
+}
+
+function toggleAppSelection(appName, isChecked) {
+  if (isChecked) {
+    selectedAppsToClose.add(appName);
+  } else {
+    selectedAppsToClose.delete(appName);
+  }
+
+  // Update select all checkbox state
+  const totalApps = currentOptimizationRecommendations.appsToClose.length;
+  const selectedCount = selectedAppsToClose.size;
+  const selectAllCheckbox = document.getElementById("selectAllApps");
+
+  if (selectedCount === 0) {
+    selectAllCheckbox.checked = false;
+    selectAllCheckbox.indeterminate = false;
+  } else if (selectedCount === totalApps) {
+    selectAllCheckbox.checked = true;
+    selectAllCheckbox.indeterminate = false;
+  } else {
+    selectAllCheckbox.checked = false;
+    selectAllCheckbox.indeterminate = true;
+  }
+}
+
+function cancelAIOptimization() {
+  document.getElementById("aiOptimizationDialog").style.display = "none";
+  currentOptimizationRecommendations = null;
+  addLog("AI最適化をキャンセルしました", "info");
+}
+
+async function confirmAIOptimization() {
+  if (!currentOptimizationRecommendations) {
+    cancelAIOptimization();
+    return;
+  }
+
+  const dialog = document.getElementById("aiOptimizationDialog");
+  const confirmBtn = dialog.querySelector(
+    'button[onclick="confirmAIOptimization()"]'
+  );
+  confirmBtn.disabled = true;
+  confirmBtn.innerHTML =
+    '<span class="material-icons">hourglass_empty</span> 実行中...';
+
+  try {
+    // ユーザーの意図に基づくウィンドウアクションを実行
+    if (
+      currentOptimizationRecommendations.windowActions &&
+      currentOptimizationRecommendations.windowActions.length > 0
+    ) {
+      const actions = currentOptimizationRecommendations.windowActions;
+      addLog(`${actions.length}個のウィンドウ配置を実行中...`, "info");
+
+      // 最小化アクションを除外（選択されたアプリのみ閉じるため）
+      const nonMinimizeActions = actions.filter((a) => a.type !== "minimize");
+
+      if (nonMinimizeActions.length > 0) {
+        const results = await window.windowAPI.executeActions(
+          nonMinimizeActions
+        );
+        const successCount = results.filter((r) => r).length;
+
+        if (successCount === results.length) {
+          addLog("すべてのウィンドウ配置が完了しました", "success");
+        } else {
+          addLog(`${successCount}/${results.length}個の配置が完了`, "warning");
+        }
+      }
+    }
+
+    // 選択されたアプリを閉じる
+    if (selectedAppsToClose.size > 0) {
+      addLog(`${selectedAppsToClose.size}個のアプリを終了中...`, "info");
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const appName of selectedAppsToClose) {
+        try {
+          const success = await window.windowAPI.quitApp(appName);
+          if (success) {
+            successCount++;
+            addLog(`${appName}を終了しました`, "success");
+          } else {
+            failCount++;
+            addLog(`${appName}の終了に失敗しました`, "error");
+          }
+        } catch (error) {
+          failCount++;
+          addLog(`${appName}の終了中にエラー: ${error.message}`, "error");
+        }
+      }
+
+      if (successCount > 0) {
+        addLog(`${successCount}個のアプリを終了しました`, "success");
+      }
+      if (failCount > 0) {
+        addLog(`${failCount}個のアプリの終了に失敗しました`, "warning");
+      }
+    }
+
+    // Refresh window list
+    setTimeout(refreshWindowList, 1000);
+  } catch (error) {
+    addLog(`最適化エラー: ${error.message}`, "error");
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML =
+      '<span class="material-icons">check_circle</span> 実行する';
+    cancelAIOptimization();
   }
 }

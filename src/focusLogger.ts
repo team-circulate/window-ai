@@ -1,5 +1,5 @@
-import { DataStore } from './dataStore';
-import { FocusSession, AppStats, TimingConfig } from './types';
+import { DataStore } from "./dataStore";
+import { FocusSession, AppStats, TimingConfig } from "./types";
 
 export class FocusLogger {
   private dataStore: DataStore;
@@ -7,12 +7,12 @@ export class FocusLogger {
     appName: string;
     startTime: number;
   } | null = null;
-  
+
   private config: TimingConfig = {
-    focusMonitoring: 1000,    // 1秒間隔 (既に実装済み)
-    dataSaving: 60000,        // 1分間隔でデータ保存 (本番)
-    analysis: 300000,         // 5分間隔でAI分析 (本番)
-    testMode: true            // テストモード (30秒間隔)
+    focusMonitoring: 1000, // 1秒間隔 (既に実装済み)
+    dataSaving: 60000, // 1分間隔でデータ保存 (本番)
+    analysis: 300000, // 5分間隔でAI分析 (本番)
+    testMode: true, // テストモード (30秒間隔)
   };
 
   private dataSavingInterval?: NodeJS.Timeout;
@@ -27,12 +27,12 @@ export class FocusLogger {
    */
   async onFocusChange(newAppName: string): Promise<void> {
     const now = Date.now();
-    
+
     // 前のセッションを終了
     if (this.currentSession && this.currentSession.appName !== newAppName) {
       await this.endCurrentSession(now);
     }
-    
+
     // 新しいセッションを開始 (同じアプリでない場合のみ)
     if (!this.currentSession || this.currentSession.appName !== newAppName) {
       this.startNewSession(newAppName, now);
@@ -45,10 +45,8 @@ export class FocusLogger {
   private startNewSession(appName: string, startTime: number): void {
     this.currentSession = {
       appName,
-      startTime
+      startTime,
     };
-    
-    console.log(`🎯 Focus session started: ${appName}`);
   }
 
   /**
@@ -56,12 +54,13 @@ export class FocusLogger {
    */
   private async endCurrentSession(endTime: number): Promise<void> {
     if (!this.currentSession) return;
-    
-    const duration = Math.round((endTime - this.currentSession.startTime) / 1000); // 秒単位
-    
+
+    const duration = Math.round(
+      (endTime - this.currentSession.startTime) / 1000
+    ); // 秒単位
+
     // 短すぎるセッション（5秒未満）は無視
     if (duration < 5) {
-      console.log(`⏭️  Short session ignored: ${this.currentSession.appName} (${duration}s)`);
       this.currentSession = null;
       return;
     }
@@ -71,13 +70,12 @@ export class FocusLogger {
       startTime: this.currentSession.startTime,
       endTime,
       duration,
-      date: this.getDateString(this.currentSession.startTime)
+      date: this.getDateString(this.currentSession.startTime),
     };
 
     // データベースに保存
     await this.dataStore.saveFocusSession(session);
-    
-    console.log(`✅ Focus session ended: ${session.appName} (${duration}s)`);
+
     this.currentSession = null;
   }
 
@@ -86,12 +84,10 @@ export class FocusLogger {
    */
   private startDataSaving(): void {
     const interval = this.config.testMode ? 30000 : this.config.dataSaving; // テスト: 30秒, 本番: 1分
-    
+
     this.dataSavingInterval = setInterval(async () => {
       await this.updateAppStats();
     }, interval);
-    
-    console.log(`🔄 Data saving started: ${interval}ms interval`);
   }
 
   /**
@@ -103,9 +99,9 @@ export class FocusLogger {
       const appStatsMap = new Map<string, AppStats>();
 
       // 各セッションから統計を計算
-      sessions.forEach(session => {
+      sessions.forEach((session) => {
         const appName = session.appName;
-        
+
         if (!appStatsMap.has(appName)) {
           appStatsMap.set(appName, {
             appName,
@@ -115,7 +111,7 @@ export class FocusLogger {
             lastUsed: 0,
             openWindows: 0,
             cpuUsage: 0,
-            memoryUsage: 0
+            memoryUsage: 0,
           });
         }
 
@@ -126,18 +122,17 @@ export class FocusLogger {
       });
 
       // 平均セッション時間を計算
-      appStatsMap.forEach(stats => {
-        stats.averageSessionTime = stats.totalSessions > 0 
-          ? Math.round(stats.totalFocusTime / stats.totalSessions)
-          : 0;
+      appStatsMap.forEach((stats) => {
+        stats.averageSessionTime =
+          stats.totalSessions > 0
+            ? Math.round(stats.totalFocusTime / stats.totalSessions)
+            : 0;
       });
 
       const appStats = Array.from(appStatsMap.values());
       await this.dataStore.saveAppStats(appStats);
-      
-      console.log(`📊 App stats updated: ${appStats.length} apps`);
     } catch (error) {
-      console.error('Error updating app stats:', error);
+      console.error("Error updating app stats:", error);
     }
   }
 
@@ -145,7 +140,7 @@ export class FocusLogger {
    * 日付文字列を取得 (YYYY-MM-DD形式)
    */
   private getDateString(timestamp: number): string {
-    return new Date(timestamp).toISOString().split('T')[0];
+    return new Date(timestamp).toISOString().split("T")[0];
   }
 
   /**
@@ -154,10 +149,10 @@ export class FocusLogger {
   async getTodayStats(): Promise<AppStats[]> {
     const today = this.getDateString(Date.now());
     const sessions = await this.dataStore.getFocusSessionsByDate(today);
-    
+
     const statsMap = new Map<string, AppStats>();
-    
-    sessions.forEach(session => {
+
+    sessions.forEach((session) => {
       if (!statsMap.has(session.appName)) {
         statsMap.set(session.appName, {
           appName: session.appName,
@@ -167,17 +162,19 @@ export class FocusLogger {
           lastUsed: 0,
           openWindows: 0,
           cpuUsage: 0,
-          memoryUsage: 0
+          memoryUsage: 0,
         });
       }
-      
+
       const stats = statsMap.get(session.appName)!;
       stats.totalSessions++;
       stats.totalFocusTime += session.duration;
       stats.lastUsed = Math.max(stats.lastUsed, session.endTime);
     });
 
-    return Array.from(statsMap.values()).sort((a, b) => b.totalFocusTime - a.totalFocusTime);
+    return Array.from(statsMap.values()).sort(
+      (a, b) => b.totalFocusTime - a.totalFocusTime
+    );
   }
 
   /**
@@ -186,8 +183,8 @@ export class FocusLogger {
   async getAllStats(): Promise<AppStats[]> {
     const sessions = await this.dataStore.loadFocusSessions();
     const statsMap = new Map<string, AppStats>();
-    
-    sessions.forEach(session => {
+
+    sessions.forEach((session) => {
       if (!statsMap.has(session.appName)) {
         statsMap.set(session.appName, {
           appName: session.appName,
@@ -197,10 +194,10 @@ export class FocusLogger {
           lastUsed: 0,
           openWindows: 0,
           cpuUsage: 0,
-          memoryUsage: 0
+          memoryUsage: 0,
         });
       }
-      
+
       const stats = statsMap.get(session.appName)!;
       stats.totalSessions++;
       stats.totalFocusTime += session.duration;
@@ -208,13 +205,16 @@ export class FocusLogger {
     });
 
     // 平均セッション時間を計算
-    statsMap.forEach(stats => {
-      stats.averageSessionTime = stats.totalSessions > 0 
-        ? Math.round(stats.totalFocusTime / stats.totalSessions)
-        : 0;
+    statsMap.forEach((stats) => {
+      stats.averageSessionTime =
+        stats.totalSessions > 0
+          ? Math.round(stats.totalFocusTime / stats.totalSessions)
+          : 0;
     });
 
-    return Array.from(statsMap.values()).sort((a, b) => b.totalFocusTime - a.totalFocusTime);
+    return Array.from(statsMap.values()).sort(
+      (a, b) => b.totalFocusTime - a.totalFocusTime
+    );
   }
 
   /**
@@ -229,14 +229,12 @@ export class FocusLogger {
    */
   updateConfig(newConfig: Partial<TimingConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    
+
     // データ保存間隔を更新
     if (this.dataSavingInterval) {
       clearInterval(this.dataSavingInterval);
       this.startDataSaving();
     }
-    
-    console.log('🔧 Focus logger config updated:', this.config);
   }
 
   /**
@@ -246,7 +244,7 @@ export class FocusLogger {
     if (this.dataSavingInterval) {
       clearInterval(this.dataSavingInterval);
     }
-    
+
     // 現在のセッションを保存
     if (this.currentSession) {
       this.endCurrentSession(Date.now());

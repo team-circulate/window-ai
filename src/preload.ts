@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("get-window-state");
   },
 
-  analyzeWindows: (userIntent: string): Promise<WindowAction[]> => {
+  analyzeWindows: (userIntent: string): Promise<any> => {
     return ipcRenderer.invoke("analyze-windows", userIntent);
   },
 
@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld("windowAPI", {
 
   quitApp: (appName: string): Promise<boolean> => {
     return ipcRenderer.invoke("quit-app", appName);
+  },
+
+  getAIOptimization: () => {
+    return ipcRenderer.invoke("get-ai-optimization");
   },
 
   getCpuInfo: (): Promise<CpuInfo> => {
@@ -213,6 +217,7 @@ declare global {
         appNames: string[]
       ) => Promise<Record<string, string | null>>;
       quitApp: (appName: string) => Promise<boolean>;
+      getAIOptimization: () => Promise<any>;
       getCpuInfo: () => Promise<CpuInfo>;
 
       // App scanner APIs
