@@ -14,14 +14,17 @@ import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./windowManager";
 import { ClaudeService } from "./claudeService";
+import { AnalysisService } from "./analysisService";
 import { FocusLogger } from "./focusLogger";
 import { WindowState, WindowAction } from "./types";
 
 let mainWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
+let analysisService: AnalysisService;
 let focusLogger: FocusLogger;
 let tray: Tray | null = null;
+let analysisInterval: NodeJS.Timeout | null = null;
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -312,6 +315,7 @@ app.whenReady().then(async () => {
   }
 
   claudeService = new ClaudeService(apiKey || "");
+  analysisService = new AnalysisService(apiKey || "");
   windowManager = new WindowManager(claudeService);
   focusLogger = new FocusLogger();
 
@@ -358,6 +362,9 @@ app.whenReady().then(async () => {
       }
     }
   }, 5000); // 5秒ごとに更新
+
+  // AI分析を定期実行（5分間隔）
+  startAIAnalysis();
 
   // アプリのフォーカス変更を検知してアクティブアプリ情報を更新
   app.on('browser-window-focus', () => {
@@ -552,9 +559,13 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  // アプリ終了時にフォーカスロガーをクリーンアップ
+  // アプリ終了時にクリーンアップ
   if (focusLogger) {
     focusLogger.destroy();
+  }
+  if (analysisInterval) {
+    clearInterval(analysisInterval);
+    analysisInterval = null;
   }
 });
 
@@ -563,3 +574,80 @@ app.on("activate", () => {
     createWindow();
   }
 });
+
+// AI分析機能
+async function startAIAnalysis() {
+  console.log("🤖 Starting AI analysis system...");
+  
+  // 初回実行は1分後（起動直後のデータ収集を待つ）
+  setTimeout(performAIAnalysis, 60000);
+  
+  // その後は5分間隔で実行
+  analysisInterval = setInterval(performAIAnalysis, 5 * 60 * 1000);
+}
+
+async function performAIAnalysis() {
+  if (!analysisService || !focusLogger || !windowManager) {
+    console.log("⚠️ Analysis services not ready");
+    return;
+  }
+
+  try {
+    console.log("🔍 Performing AI analysis...");
+    
+    // 1. フォーカス統計データを取得
+    const focusStats = await focusLogger.getAllStats();
+    if (focusStats.length === 0) {
+      console.log("📊 No focus data available for analysis");
+      return;
+    }
+
+    // 2. CPU・メモリ情報を取得
+    const cpuInfo = await windowManager.getCpuInfo();
+    const processes = cpuInfo.processes;
+
+    // 3. 現在実行中のアプリ一覧を取得
+    const windowState = await windowManager.getWindowState();
+    const currentApps = [...new Set(windowState.windows.map(w => w.appName))];
+
+    console.log(`📊 Analyzing ${focusStats.length} apps, ${processes.length} processes`);
+
+    // 4. フォーカス分析を実行
+    console.log("🎯 Analyzing focus patterns...");
+    const focusAnalysis = await analysisService.analyzeFocusPatterns(focusStats);
+    console.log(`Found ${focusAnalysis.distractingApps.length} distracting apps`);
+
+    // 5. リソース分析を実行
+    console.log("⚡ Analyzing resource usage...");
+    const resourceAnalysis = await analysisService.analyzeResourceUsage(processes);
+    console.log(`Found ${resourceAnalysis.heavyResourceApps.length} heavy resource apps`);
+
+    // 6. 統合分析で閉じるべきアプリを特定
+    console.log("🔗 Performing integrated analysis...");
+    const recommendations = await analysisService.getIntegratedRecommendations(
+      focusAnalysis,
+      resourceAnalysis,
+      currentApps
+    );
+
+    console.log(`✅ Analysis complete: ${recommendations.appsToClose.length} apps recommended to close`);
+    console.log(`📈 System health score: ${recommendations.systemHealthScore}/100`);
+    
+    // 結果をログに出力（デバッグ用）
+    if (recommendations.appsToClose.length > 0) {
+      console.log("🎯 Apps recommended to close:");
+      recommendations.appsToClose.forEach(app => {
+        console.log(`  - ${app.appName} (${app.priority}): ${app.expectedBenefit}`);
+        console.log(`    Reasons: ${app.reasons.join(', ')}`);
+      });
+    }
+
+    console.log("💡 Overall assessment:", recommendations.overallAssessment);
+
+    // TODO: フェーズ3でここに通知機能を追加
+
+  } catch (error) {
+    console.error("❌ AI analysis error:", error);
+  }
+}
+
