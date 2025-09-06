@@ -67,16 +67,42 @@
       }
 
       .input-section {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
+        background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.12) 0%,
+          rgba(255, 255, 255, 0.06) 100%
+        );
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        backdrop-filter: blur(12px);
+        border-radius: 16px;
         padding: 20px;
         margin-bottom: 20px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) inset,
+          0 2px 10px rgba(0, 0, 0, 0.08);
+      }
+
+      .input-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        opacity: 0.95;
       }
 
       .input-group {
         display: flex;
         gap: 10px;
+        padding: 10px;
+        background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.14) 0%,
+          rgba(255, 255, 255, 0.08) 100%
+        );
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 12px;
+        align-items: center;
       }
 
       #userIntent {
@@ -84,7 +110,7 @@
         padding: 12px 16px;
         background: rgba(255, 255, 255, 0.9);
         color: #333;
-        border: none;
+        border: 1px solid rgba(0, 0, 0, 0.06);
         border-radius: 8px;
         font-size: 14px;
         outline: none;
@@ -92,6 +118,12 @@
 
       #userIntent::placeholder {
         color: #999;
+      }
+
+      #userIntent:focus {
+        border-color: rgba(99, 102, 241, 0.6);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+        background: #fff;
       }
 
       button {
@@ -122,6 +154,22 @@
         opacity: 0.5;
         cursor: not-allowed;
         transform: none;
+      }
+
+      /* 強調ボタンとセカンダリーボタン */
+      #analyzeBtn {
+        background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+        color: #fff;
+      }
+
+      #analyzeBtn:hover:not(:disabled) {
+        box-shadow: 0 10px 22px rgba(99, 102, 241, 0.35);
+      }
+
+      #refreshBtn {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        color: #fff;
       }
 
       .quick-actions {
@@ -505,14 +553,18 @@
 
     <div class="main-content">
       <div class="input-section">
+        <div class="input-title">
+          <span class="material-icons">auto_awesome</span>
+          タスクから最適なアプリを起動
+        </div>
         <div class="input-group">
           <input
             type="text"
             id="userIntent"
-            placeholder="例: Safariを左側、VSCodeを右側に配置して"
+            placeholder="やりたいことを入力（例: Safariを左、VSCodeを右に）"
           />
           <button id="analyzeBtn">
-            <span class="material-icons">auto_fix_high</span> 分析・実行
+            <span class="material-icons">auto_awesome</span> 提案
           </button>
           <button id="refreshBtn">
             <span class="material-icons">refresh</span> 更新

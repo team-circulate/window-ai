@@ -185,7 +185,7 @@ async function analyzeAndExecute() {
 
   const analyzeBtn = document.getElementById("analyzeBtn");
   analyzeBtn.disabled = true;
-  analyzeBtn.textContent = "処理中...";
+  analyzeBtn.innerHTML = '<span class="material-icons">hourglass_top</span> 処理中...';
 
   try {
     addLog(`AI分析中: "${userIntent}"`, "info");
@@ -218,7 +218,7 @@ async function analyzeAndExecute() {
     addLog(`エラー: ${error.message}`, "error");
   } finally {
     analyzeBtn.disabled = false;
-    analyzeBtn.textContent = "分析・実行";
+    analyzeBtn.innerHTML = '<span class="material-icons">auto_awesome</span> 提案';
   }
 }
 
