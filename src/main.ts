@@ -131,9 +131,16 @@ async function createWindow() {
     vibrancy: "sidebar",
     backgroundColor: "#00000000",
     alwaysOnTop: false,
+    show: false, // 最初は非表示にして、loadFile後に表示
   });
 
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
+
+  // ウィンドウは初期状態では非表示（メニューバーから制御）
+  // mainWindow.once('ready-to-show', () => {
+  //   mainWindow?.show();
+  //   mainWindow?.focus();
+  // });
 
   // ウィンドウを閉じる際の処理
   mainWindow.on("close", (event) => {
@@ -141,10 +148,10 @@ async function createWindow() {
     if (process.platform === "darwin") {
       event.preventDefault();
       mainWindow?.hide();
-      // Dockアイコンも非表示にする（オプション）
-      if (app.dock) {
-        app.dock.hide();
-      }
+      // Dockアイコンは表示したままにする
+      // if (app.dock) {
+      //   app.dock.hide();
+      // }
     }
   });
 
@@ -279,6 +286,22 @@ function createTray() {
   // コンテキストメニューの作成
   const contextMenu = Menu.buildFromTemplate([
     {
+      label: "メインウィンドウを表示",
+      accelerator: "Command+M",
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isVisible()) {
+            mainWindow.hide();
+          } else {
+            mainWindow.show();
+            mainWindow.focus();
+          }
+        } else {
+          createWindow();
+        }
+      },
+    },
+    {
       label: "Spotlight検索を開く",
       accelerator: "Option+Shift+W",
       click: () => {
@@ -312,6 +335,10 @@ function createTray() {
     {
       label: "ホットキー",
       submenu: [
+        {
+          label: "Command+M: メインウィンドウ表示/非表示",
+          enabled: false,
+        },
         {
           label: "Option+Shift+W: Spotlight検索を開く",
           enabled: false,
@@ -417,8 +444,8 @@ app.whenReady().then(async () => {
   focusLogger = new FocusLogger();
   notificationSystem = new NotificationSystem(mainWindow || undefined);
 
-  // メインウィンドウは作成せず、Spotlightウィンドウのみを使用
-  // createWindow();
+  // メインウィンドウとトレイを作成
+  createWindow();
   createTray();
   
   // トレイアニメーションのプリロードと開始
@@ -431,6 +458,27 @@ app.whenReady().then(async () => {
   }
   
   // グローバルホットキーの登録
+  // Command+M でメインウィンドウの表示/非表示を切り替え
+  const mainWindowHotkey = 'Command+M';
+  const mainWindowHotkeyRegistered = globalShortcut.register(mainWindowHotkey, () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    } else {
+      createWindow();
+    }
+  });
+
+  if (!mainWindowHotkeyRegistered) {
+    console.error(`Failed to register hotkey: ${mainWindowHotkey}`);
+  } else {
+    console.log(`Global hotkey registered: ${mainWindowHotkey}`);
+  }
+
   // Option+Shift+W でSpotlightウィンドウの表示/非表示を切り替え
   const toggleWindowHotkey = 'Option+Shift+W';
   const hotkeyRegistered = globalShortcut.register(toggleWindowHotkey, () => {
