@@ -1,5 +1,7 @@
 let userProfile = null;
 let optimalLayouts = null;
+let workflows = null;
+let appIcons = {};
 
 async function loadAnalysisData() {
   try {
@@ -8,11 +10,39 @@ async function loadAnalysisData() {
     
     userProfile = analysisData.profile;
     optimalLayouts = analysisData.layouts;
+    workflows = analysisData.workflows;
+
+    // アプリアイコンを一括取得
+    await loadAppIcons();
 
     displayAnalysisResults();
   } catch (error) {
     console.error('Failed to load analysis data:', error);
     showErrorState();
+  }
+}
+
+async function loadAppIcons() {
+  try {
+    // ワークフローで使用されているアプリ名を収集
+    const appNamesSet = new Set();
+    
+    if (workflows && workflows.workflows) {
+      workflows.workflows.forEach(workflow => {
+        if (workflow.apps) {
+          workflow.apps.forEach(app => {
+            appNamesSet.add(app.appName);
+          });
+        }
+      });
+    }
+
+    if (appNamesSet.size > 0) {
+      const appNames = Array.from(appNamesSet);
+      appIcons = await window.windowAPI.getAppIconsBatch(appNames);
+    }
+  } catch (error) {
+    console.error('Failed to load app icons:', error);
   }
 }
 
@@ -22,6 +52,10 @@ function displayAnalysisResults() {
 
   if (userProfile) {
     displayUserProfile(userProfile);
+  }
+
+  if (workflows && workflows.workflows) {
+    displayWorkflows(workflows.workflows);
   }
 
   if (optimalLayouts && optimalLayouts.layouts) {
@@ -52,9 +86,6 @@ function displayUserProfile(profile) {
     });
   }
 
-  // ワークスタイルを表示
-  const workStyleElement = document.getElementById('workStyle');
-  workStyleElement.textContent = profile.workStyle || 'バランス型のワークスタイル';
 
   // 推奨事項を表示
   const recommendationsList = document.getElementById('recommendationsList');
@@ -70,6 +101,83 @@ function displayUserProfile(profile) {
       recommendationsList.appendChild(listItem);
     });
   }
+}
+
+function displayWorkflows(workflowList) {
+  const workflowsContainer = document.getElementById('workflowsContainer');
+  workflowsContainer.innerHTML = '';
+
+  if (!workflowList || workflowList.length === 0) {
+    workflowsContainer.innerHTML = '<p style="opacity: 0.7; text-align: center;">ワークフロー提案を生成できませんでした</p>';
+    return;
+  }
+
+  const workflowGrid = document.createElement('div');
+  workflowGrid.className = 'workflow-grid';
+
+  workflowList.forEach(workflow => {
+    const workflowCard = createWorkflowCard(workflow);
+    workflowGrid.appendChild(workflowCard);
+  });
+
+  workflowsContainer.appendChild(workflowGrid);
+}
+
+function createWorkflowCard(workflow) {
+  const card = document.createElement('div');
+  card.className = 'workflow-card';
+
+  // アプリリスト作成
+  let appListHTML = '';
+  if (workflow.apps && workflow.apps.length > 0) {
+    appListHTML = workflow.apps.map(app => {
+      const iconHTML = appIcons[app.appName] 
+        ? `<img src="${appIcons[app.appName]}" alt="${app.appName}" class="app-icon-mini">`
+        : `<div class="app-icon-mini-placeholder">${app.appName.charAt(0)}</div>`;
+      
+      return `
+        <div class="app-item-workflow" title="${app.reasoning}">
+          ${iconHTML}
+          <span>${app.appName}</span>
+          <span class="app-role">(${app.role})</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // コツ・ヒント作成
+  let tipsHTML = '';
+  if (workflow.tips && workflow.tips.length > 0) {
+    tipsHTML = workflow.tips.map(tip => 
+      `<div class="workflow-tip">${tip}</div>`
+    ).join('');
+  }
+
+  card.innerHTML = `
+    <div class="workflow-name">${workflow.name}</div>
+    <div class="workflow-description">${workflow.description}</div>
+    
+    ${workflow.apps && workflow.apps.length > 0 ? `
+    <div class="workflow-apps">
+      <div class="workflow-apps-title">使用アプリ</div>
+      <div class="app-list">
+        ${appListHTML}
+      </div>
+    </div>
+    ` : ''}
+    
+    ${workflow.tips && workflow.tips.length > 0 ? `
+    <div class="workflow-tips">
+      <div class="workflow-tips-title">
+        <span class="material-icons" style="font-size: 14px;">tips_and_updates</span>
+        実践のコツ
+      </div>
+      ${tipsHTML}
+    </div>
+    ` : ''}
+  `;
+
+  return card;
 }
 
 function displayOptimalLayouts(layouts) {

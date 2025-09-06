@@ -1273,7 +1273,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  // 統合分析（プロフィール + レイアウト）
+  // 統合分析（プロフィール + レイアウト + ワークフロー）
   ipcMain.handle("get-user-analysis", async () => {
     try {
       console.log("🔬 Performing comprehensive user analysis...");
@@ -1282,17 +1282,20 @@ app.whenReady().then(async () => {
       const appNames = installedApps.map(app => app.name);
       const appDescriptions = graphManager.getAllApplications();
       
-      // 並列で分析を実行
-      const [userProfile, optimalLayouts] = await Promise.all([
-        claudeService.analyzeUserProfile(appNames, appDescriptions),
-        claudeService.analyzeUserProfile(appNames, appDescriptions).then(profile => 
-          claudeService.generateOptimalLayouts(profile, appNames)
-        )
+      // 段階的に分析を実行（ユーザープロフィールが他の分析に必要なため）
+      console.log("📊 Step 1: Analyzing user profile...");
+      const userProfile = await claudeService.analyzeUserProfile(appNames, appDescriptions);
+      
+      console.log("🔧 Step 2: Generating workflows and layouts...");
+      const [workflows, optimalLayouts] = await Promise.all([
+        claudeService.generateWorkflowSuggestions(userProfile, appNames, appDescriptions),
+        claudeService.generateOptimalLayouts(userProfile, appNames)
       ]);
       
       console.log("✅ Comprehensive analysis complete");
       return {
         profile: userProfile,
+        workflows: workflows,
         layouts: optimalLayouts
       };
     } catch (error) {
