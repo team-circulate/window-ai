@@ -654,6 +654,247 @@
         color: #4ade80;
       }
 
+      /* 通知システム用スタイル */
+      .notifications-section {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+
+      .notifications-controls {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+      }
+
+      .notifications-content {
+        margin-top: 15px;
+      }
+
+      .notifications-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      .notification-summary-card {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+
+      .notifications-list {
+        max-height: 400px;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        padding: 10px;
+      }
+
+      .notification-item {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-left: 4px solid;
+        transition: all 0.2s;
+      }
+
+      .notification-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .notification-item.unread {
+        border-left-color: #4ade80;
+        background: rgba(74, 222, 128, 0.1);
+      }
+
+      .notification-item.urgent {
+        border-left-color: #ef4444;
+      }
+
+      .notification-item.high {
+        border-left-color: #f59e0b;
+      }
+
+      .notification-item.medium {
+        border-left-color: #3b82f6;
+      }
+
+      .notification-item.low {
+        border-left-color: #6b7280;
+      }
+
+      .notification-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .notification-title {
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      .notification-time {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+
+      .notification-message {
+        font-size: 13px;
+        margin-bottom: 10px;
+        opacity: 0.9;
+      }
+
+      .notification-apps {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .notification-app {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        font-size: 12px;
+      }
+
+      .app-quit-btn {
+        background: rgba(239, 68, 68, 0.2);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .app-quit-btn:hover {
+        background: rgba(239, 68, 68, 0.4);
+      }
+
+      .app-quit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* モーダル用スタイル */
+      .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal-content {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 80%;
+        overflow: hidden;
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        color: white;
+      }
+
+      .modal-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-body {
+        padding: 20px;
+        color: white;
+      }
+
+      .setting-group {
+        margin-bottom: 20px;
+      }
+
+      .setting-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+      }
+
+      .setting-group select {
+        width: 100%;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        font-size: 14px;
+      }
+
+      .setting-group input[type="checkbox"] {
+        margin-right: 8px;
+        transform: scale(1.2);
+      }
+
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .modal-footer button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      #saveSettingsBtn {
+        background: #4ade80;
+        color: #065f46;
+      }
+
+      #cancelSettingsBtn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+      }
+
       .stats-charts {
         background: rgba(255, 255, 255, 0.05);
         border-radius: 8px;
@@ -807,6 +1048,66 @@
         </div>
         <div class="window-list" id="windowList">
           <!-- Windows will be populated here -->
+        </div>
+      </div>
+
+      <!-- AI通知・提案セクション -->
+      <div class="notifications-section">
+        <div class="status-title">
+          <span class="status-indicator"></span>
+          <span class="material-icons" style="font-size: 18px">notifications</span>
+          AI分析・通知履歴
+          <div class="notifications-controls">
+            <button id="notificationSettingsBtn" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;">設定</button>
+            <button id="refreshNotificationsBtn" style="padding: 4px 8px; font-size: 11px;">更新</button>
+          </div>
+        </div>
+        
+        <div class="notifications-content">
+          <div id="notificationsSummary" class="notifications-summary">
+            <!-- 通知サマリーがここに生成される -->
+          </div>
+          
+          <div class="notifications-list" id="notificationsList">
+            <!-- 通知履歴がここに生成される -->
+          </div>
+        </div>
+
+        <!-- 設定モーダル -->
+        <div id="notificationSettingsModal" class="modal" style="display: none;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>AI分析・通知設定</h3>
+              <button class="modal-close" id="closeSettingsModal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="setting-group">
+                <label>分析実行間隔:</label>
+                <select id="analysisIntervalSelect">
+                  <option value="0">無効</option>
+                  <option value="60000">1分</option>
+                  <option value="300000">5分</option>
+                  <option value="900000">15分</option>
+                  <option value="1800000">30分</option>
+                  <option value="3600000">1時間</option>
+                </select>
+              </div>
+              <div class="setting-group">
+                <label>
+                  <input type="checkbox" id="enableNotifications"> AI分析結果の通知を有効にする
+                </label>
+              </div>
+              <div class="setting-group">
+                <label>
+                  <input type="checkbox" id="enableSystemNotifications"> macOSシステム通知を有効にする
+                </label>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button id="saveSettingsBtn">保存</button>
+              <button id="cancelSettingsBtn">キャンセル</button>
+            </div>
+          </div>
         </div>
       </div>
 

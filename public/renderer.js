@@ -33,6 +33,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // 統計画面の初期化
   initializeStatistics();
   
+  // 通知システムの初期化
+  initializeNotifications();
+  
   // 統計更新ボタンのイベントリスナー
   document.getElementById('statsRefreshBtn').addEventListener('click', loadFocusStatistics);
 
@@ -760,4 +763,206 @@ function formatDate(timestamp) {
   if (diffDays < 7) return `${diffDays}日前`;
   
   return date.toLocaleDateString('ja-JP');
+}
+
+// 通知システム関連の関数
+async function initializeNotifications() {
+  try {
+    // イベントリスナーを設定
+    document.getElementById('notificationSettingsBtn').addEventListener('click', openSettingsModal);
+    document.getElementById('refreshNotificationsBtn').addEventListener('click', loadNotifications);
+    document.getElementById('closeSettingsModal').addEventListener('click', closeSettingsModal);
+    document.getElementById('cancelSettingsBtn').addEventListener('click', closeSettingsModal);
+    document.getElementById('saveSettingsBtn').addEventListener('click', saveNotificationSettings);
+    
+    // リアルタイム通知リスナー
+    if (window.windowAPI.onNewAnalysisNotification) {
+      window.windowAPI.onNewAnalysisNotification((notification) => {
+        console.log('New notification received:', notification);
+        // 通知履歴を再読み込み
+        loadNotifications();
+      });
+    }
+    
+    // 初期データを読み込み
+    await loadNotifications();
+    await loadNotificationsSummary();
+    
+    console.log('📢 Notifications system initialized');
+  } catch (error) {
+    console.error('Error initializing notifications:', error);
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const notifications = await window.windowAPI.getNotifications();
+    displayNotifications(notifications);
+  } catch (error) {
+    console.error('Error loading notifications:', error);
+    document.getElementById('notificationsList').innerHTML = '<p style="color: #ff6b6b;">通知の読み込みに失敗しました</p>';
+  }
+}
+
+function displayNotifications(notifications) {
+  const container = document.getElementById('notificationsList');
+  
+  if (notifications.length === 0) {
+    container.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.7;">まだAI分析結果がありません</div>';
+    return;
+  }
+  
+  const notificationsHtml = notifications.map(notification => {
+    const priorityClass = notification.appsToClose.length > 0 
+      ? notification.appsToClose[0].priority 
+      : 'low';
+    
+    const appsHtml = notification.appsToClose.map(app => `
+      <div class="notification-app">
+        <div>
+          <strong>${app.appName}</strong> (${app.priority})
+          <br>
+          <small>${app.expectedBenefit}</small>
+        </div>
+        <button class="app-quit-btn" onclick="quitRecommendedApp('${app.appName}', this)">
+          終了
+        </button>
+      </div>
+    `).join('');
+    
+    return `
+      <div class="notification-item ${notification.read ? '' : 'unread'} ${priorityClass}" 
+           onclick="markNotificationAsRead('${notification.id}')">
+        <div class="notification-header">
+          <div class="notification-title">${notification.title}</div>
+          <div class="notification-time">${formatDate(notification.timestamp)}</div>
+        </div>
+        <div class="notification-message">${notification.message}</div>
+        <div style="margin-bottom: 10px; font-size: 12px;">
+          <strong>システム健康度:</strong> ${notification.systemHealthScore}/100
+        </div>
+        ${notification.appsToClose.length > 0 ? `
+          <div class="notification-apps">
+            ${appsHtml}
+          </div>
+        ` : ''}
+        ${notification.overallAssessment ? `
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; opacity: 0.8;">
+            ${notification.overallAssessment}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  container.innerHTML = notificationsHtml;
+}
+
+async function loadNotificationsSummary() {
+  try {
+    const stats = await window.windowAPI.getNotificationStats();
+    const summaryContainer = document.getElementById('notificationsSummary');
+    
+    summaryContainer.innerHTML = `
+      <div class="notification-summary-card">
+        <div class="summary-value">${stats.totalNotifications}</div>
+        <div class="summary-label">総通知数</div>
+      </div>
+      <div class="notification-summary-card">
+        <div class="summary-value">${stats.unreadCount}</div>
+        <div class="summary-label">未読通知</div>
+      </div>
+      <div class="notification-summary-card">
+        <div class="summary-value">${stats.avgSystemHealth}/100</div>
+        <div class="summary-label">平均健康度</div>
+      </div>
+      <div class="notification-summary-card">
+        <div class="summary-value">${stats.lastNotification ? formatDate(new Date(stats.lastNotification).getTime()) : '無し'}</div>
+        <div class="summary-label">最新通知</div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error loading notifications summary:', error);
+  }
+}
+
+async function markNotificationAsRead(notificationId) {
+  try {
+    await window.windowAPI.markNotificationRead(notificationId);
+    // 表示を更新
+    loadNotifications();
+    loadNotificationsSummary();
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+  }
+}
+
+async function quitRecommendedApp(appName, button) {
+  try {
+    button.disabled = true;
+    button.textContent = '終了中...';
+    
+    const success = await window.windowAPI.quitRecommendedApp(appName);
+    
+    if (success) {
+      button.textContent = '完了';
+      button.style.background = 'rgba(74, 222, 128, 0.2)';
+      button.style.borderColor = 'rgba(74, 222, 128, 0.3)';
+      setTimeout(() => {
+        loadNotifications(); // 画面を更新
+      }, 1000);
+    } else {
+      button.textContent = '失敗';
+      button.style.background = 'rgba(239, 68, 68, 0.4)';
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = '終了';
+        button.style.background = 'rgba(239, 68, 68, 0.2)';
+      }, 2000);
+    }
+  } catch (error) {
+    console.error('Error quitting app:', error);
+    button.disabled = false;
+    button.textContent = '終了';
+  }
+}
+
+async function openSettingsModal() {
+  try {
+    const settings = await window.windowAPI.getNotificationSettings();
+    
+    document.getElementById('analysisIntervalSelect').value = settings.analysisInterval || 300000;
+    document.getElementById('enableNotifications').checked = settings.enableNotifications !== false;
+    document.getElementById('enableSystemNotifications').checked = settings.enableSystemNotifications !== false;
+    
+    document.getElementById('notificationSettingsModal').style.display = 'flex';
+  } catch (error) {
+    console.error('Error opening settings modal:', error);
+  }
+}
+
+function closeSettingsModal() {
+  document.getElementById('notificationSettingsModal').style.display = 'none';
+}
+
+async function saveNotificationSettings() {
+  try {
+    const settings = {
+      analysisInterval: parseInt(document.getElementById('analysisIntervalSelect').value),
+      enableNotifications: document.getElementById('enableNotifications').checked,
+      enableSystemNotifications: document.getElementById('enableSystemNotifications').checked
+    };
+    
+    const success = await window.windowAPI.saveNotificationSettings(settings);
+    
+    if (success) {
+      closeSettingsModal();
+      console.log('Settings saved successfully');
+    } else {
+      alert('設定の保存に失敗しました');
+    }
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    alert('設定の保存中にエラーが発生しました');
+  }
 }

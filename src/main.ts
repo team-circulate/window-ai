@@ -15,6 +15,7 @@ import * as dotenv from "dotenv";
 import { WindowManager } from "./windowManager";
 import { ClaudeService } from "./claudeService";
 import { AnalysisService } from "./analysisService";
+import { NotificationSystem } from "./notificationSystem";
 import { FocusLogger } from "./focusLogger";
 import { WindowState, WindowAction } from "./types";
 
@@ -22,6 +23,7 @@ let mainWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
 let analysisService: AnalysisService;
+let notificationSystem: NotificationSystem;
 let focusLogger: FocusLogger;
 let tray: Tray | null = null;
 let analysisInterval: NodeJS.Timeout | null = null;
@@ -318,6 +320,7 @@ app.whenReady().then(async () => {
   analysisService = new AnalysisService(apiKey || "");
   windowManager = new WindowManager(claudeService);
   focusLogger = new FocusLogger();
+  notificationSystem = new NotificationSystem(mainWindow || undefined);
 
   createWindow();
   createTray();
@@ -550,6 +553,94 @@ app.whenReady().then(async () => {
       }
     }
   );
+
+  // 通知システム関連のIPCハンドラー
+  ipcMain.handle(
+    "get-notifications",
+    async () => {
+      try {
+        return await notificationSystem.loadNotifications();
+      } catch (error) {
+        console.error('Error getting notifications:', error);
+        return [];
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "mark-notification-read",
+    async (_, notificationId: string) => {
+      try {
+        await notificationSystem.markAsRead(notificationId);
+        return true;
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+        return false;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-notification-settings",
+    async () => {
+      try {
+        return await notificationSystem.getSettings();
+      } catch (error) {
+        console.error('Error getting notification settings:', error);
+        return {};
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "save-notification-settings",
+    async (_, settings) => {
+      try {
+        await notificationSystem.saveSettings(settings);
+        // 分析間隔を更新
+        await updateAnalysisInterval();
+        return true;
+      } catch (error) {
+        console.error('Error saving notification settings:', error);
+        return false;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-notification-stats",
+    async () => {
+      try {
+        return await notificationSystem.getNotificationStats();
+      } catch (error) {
+        console.error('Error getting notification stats:', error);
+        return {
+          totalNotifications: 0,
+          unreadCount: 0,
+          lastNotification: null,
+          avgSystemHealth: 100
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "quit-recommended-app",
+    async (_, appName: string) => {
+      try {
+        const success = await windowManager.quitApp(appName);
+        if (success) {
+          console.log(`✅ Successfully quit app: ${appName}`);
+        } else {
+          console.log(`❌ Failed to quit app: ${appName}`);
+        }
+        return success;
+      } catch (error) {
+        console.error(`Error quitting app ${appName}:`, error);
+        return false;
+      }
+    }
+  );
 });
 
 app.on("window-all-closed", () => {
@@ -582,8 +673,26 @@ async function startAIAnalysis() {
   // 初回実行は1分後（起動直後のデータ収集を待つ）
   setTimeout(performAIAnalysis, 60000);
   
-  // その後は5分間隔で実行
-  analysisInterval = setInterval(performAIAnalysis, 5 * 60 * 1000);
+  // 設定から分析間隔を取得して定期実行を設定
+  await updateAnalysisInterval();
+}
+
+async function updateAnalysisInterval() {
+  if (analysisInterval) {
+    clearInterval(analysisInterval);
+    analysisInterval = null;
+  }
+
+  if (!notificationSystem) return;
+  
+  const settings = await notificationSystem.getSettings();
+  
+  if (settings.analysisInterval > 0) {
+    analysisInterval = setInterval(performAIAnalysis, settings.analysisInterval);
+    console.log(`⏰ Analysis interval set to ${settings.analysisInterval / 1000}s`);
+  } else {
+    console.log("🚫 AI analysis disabled by user settings");
+  }
 }
 
 async function performAIAnalysis() {
@@ -644,7 +753,10 @@ async function performAIAnalysis() {
 
     console.log("💡 Overall assessment:", recommendations.overallAssessment);
 
-    // TODO: フェーズ3でここに通知機能を追加
+    // 通知システムに結果を送信
+    if (notificationSystem) {
+      await notificationSystem.sendAnalysisNotification(recommendations);
+    }
 
   } catch (error) {
     console.error("❌ AI analysis error:", error);
