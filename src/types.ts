@@ -43,6 +43,12 @@ export interface ProcessInfo {
   description?: string // プロセスの説明（AIが生成）
 }
 
+export interface AppResourceUsage {
+  totalCpu: number
+  totalMemory: number
+  processCount: number
+}
+
 export interface WindowState {
   windows: WindowInfo[]
   displays: Display[]
