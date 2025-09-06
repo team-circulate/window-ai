@@ -2,20 +2,26 @@ let currentWindows = [];
 let iconCache = {}; // アイコンのキャッシュ
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
-  refreshWindowList()
-  refreshCpuInfo()
-  
+document.addEventListener("DOMContentLoaded", () => {
+  refreshWindowList();
+  refreshCpuInfo();
+
   // Event listeners
-  document.getElementById('analyzeBtn').addEventListener('click', analyzeAndExecute)
-  document.getElementById('refreshBtn').addEventListener('click', refreshWindowList)
-  document.getElementById('cpuRefreshBtn').addEventListener('click', refreshCpuInfo)
-  
+  document
+    .getElementById("analyzeBtn")
+    .addEventListener("click", analyzeAndExecute);
+  document
+    .getElementById("refreshBtn")
+    .addEventListener("click", refreshWindowList);
+  document
+    .getElementById("cpuRefreshBtn")
+    .addEventListener("click", refreshCpuInfo);
+
   // Auto-refresh CPU info every 5 seconds
   setInterval(() => {
-    refreshCpuInfo()
-  }, 5000)
-  
+    refreshCpuInfo();
+  }, 5000);
+
   // Quick action buttons
   document.querySelectorAll(".quick-action").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -35,18 +41,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function refreshWindowList() {
   try {
-    addLog('ウィンドウ情報を取得中...', 'info')
-    const windowState = await window.windowAPI.getWindowState()
-    currentWindows = windowState.windows
-    
-    displayWindows(windowState.windows)
-    
+    addLog("ウィンドウ情報を取得中...", "info");
+    const windowState = await window.windowAPI.getWindowState();
+    currentWindows = windowState.windows;
+
+    displayWindows(windowState.windows);
+
     // CPU情報も一緒に表示
     if (windowState.cpuInfo) {
-      displayCpuInfo(windowState.cpuInfo)
+      displayCpuInfo(windowState.cpuInfo);
     }
-    
-    addLog(`${windowState.windows.length}個のウィンドウを検出`, 'success')
+
+    addLog(`${windowState.windows.length}個のウィンドウを検出`, "success");
   } catch (error) {
     addLog(`エラー: ${error.message}`, "error");
   }
@@ -54,12 +60,12 @@ async function refreshWindowList() {
 
 async function refreshCpuInfo() {
   try {
-    addLog('CPU情報を取得中...', 'info')
-    const cpuInfo = await window.windowAPI.getCpuInfo()
-    displayCpuInfo(cpuInfo)
-    addLog('CPU情報を更新しました', 'success')
+    addLog("CPU情報を取得中...", "info");
+    const cpuInfo = await window.windowAPI.getCpuInfo();
+    displayCpuInfo(cpuInfo);
+    addLog("CPU情報を更新しました", "success");
   } catch (error) {
-    addLog(`CPU情報取得エラー: ${error.message}`, 'error')
+    addLog(`CPU情報取得エラー: ${error.message}`, "error");
   }
 }
 
@@ -71,7 +77,7 @@ function displayWindows(windows) {
       '<div class="window-item">ウィンドウが見つかりません</div>';
     return;
   }
-  
+
   windowList.innerHTML = windows
     .map((window) => {
       const icon = window.appIcon;
@@ -112,10 +118,22 @@ function displayWindows(windows) {
         window.cpuUsage !== undefined && window.memoryUsage !== undefined
           ? `
       <div class="window-resource-usage">
-        <span class="resource-cpu" style="color: ${window.cpuUsage > 10 ? '#ff6b6b' : window.cpuUsage > 5 ? '#fbbf24' : '#4ade80'}">
+        <span class="resource-cpu" style="color: ${
+          window.cpuUsage > 10
+            ? "#ff6b6b"
+            : window.cpuUsage > 5
+            ? "#fbbf24"
+            : "#4ade80"
+        }">
           CPU: ${window.cpuUsage.toFixed(1)}%
         </span>
-        <span class="resource-memory" style="color: ${window.memoryUsage > 500 ? '#ff6b6b' : window.memoryUsage > 200 ? '#fbbf24' : '#60a5fa'}">
+        <span class="resource-memory" style="color: ${
+          window.memoryUsage > 500
+            ? "#ff6b6b"
+            : window.memoryUsage > 200
+            ? "#fbbf24"
+            : "#60a5fa"
+        }">
           RAM: ${window.memoryUsage.toFixed(0)}MB
         </span>
       </div>
@@ -124,15 +142,25 @@ function displayWindows(windows) {
 
       return `
     <div class="window-item">
-      <div class="window-info" onclick="focusWindow('${window.id}')" style="cursor: pointer;">
+      <div class="window-info" onclick="focusWindow('${
+        window.id
+      }')" style="cursor: pointer;">
         ${iconHtml}
         <div class="window-details">
           <div class="window-main-info">
             <strong>${window.appName}</strong>
             <br>
-            <small>${window.title || 'Untitled'}</small>
-            ${window.isMinimized ? '<span class="state-badge">最小化</span>' : ''}
-            ${window.isMaximized ? '<span class="state-badge">最大化</span>' : ''}
+            <small>${window.title || "Untitled"}</small>
+            ${
+              window.isMinimized
+                ? '<span class="state-badge">最小化</span>'
+                : ""
+            }
+            ${
+              window.isMaximized
+                ? '<span class="state-badge">最大化</span>'
+                : ""
+            }
           </div>
           ${resourceUsage}
         </div>
@@ -370,11 +398,19 @@ function displayCpuInfo(cpuInfo) {
           <div class="process-main">
             <span class="process-name">${proc.name}</span>
             <span class="process-stats">
-              <span class="process-cpu" style="color: ${cpuColor}">${proc.cpuUsage.toFixed(1)}%</span>
-              <span class="process-memory" style="color: ${memColor}">${proc.memoryUsage.toFixed(1)}MB</span>
+              <span class="process-cpu" style="color: ${cpuColor}">${proc.cpuUsage.toFixed(
+              1
+            )}%</span>
+              <span class="process-memory" style="color: ${memColor}">${proc.memoryUsage.toFixed(
+              1
+            )}MB</span>
             </span>
           </div>
-          ${proc.description ? `<div class="process-description">${proc.description}</div>` : ''}
+          ${
+            proc.description
+              ? `<div class="process-description">${proc.description}</div>`
+              : ""
+          }
         </div>
       `;
           })
@@ -385,7 +421,9 @@ function displayCpuInfo(cpuInfo) {
     <div class="cpu-overview">
       <div class="cpu-stat">
         <div class="cpu-label">CPU使用率</div>
-        <div class="cpu-value" style="color: ${usageColor}">${cpuInfo.usage.toFixed(1)}%</div>
+        <div class="cpu-value" style="color: ${usageColor}">${cpuInfo.usage.toFixed(
+    1
+  )}%</div>
       </div>
       <div class="cpu-stat">
         <div class="cpu-label">コア数</div>
@@ -411,7 +449,7 @@ function addLog(message, type = "info") {
   logEntry.textContent = `[${timestamp}] ${message}`;
 
   logContainer.insertBefore(logEntry, logContainer.firstChild);
-  
+
   // Keep only last 10 logs
   while (logContainer.children.length > 10) {
     logContainer.removeChild(logContainer.lastChild);

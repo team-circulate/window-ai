@@ -75,7 +75,7 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-  
+
   // APIキーを確認
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -152,7 +152,7 @@ app.whenReady().then(async () => {
     "execute-action",
     async (_, action: WindowAction): Promise<boolean> => {
       const result = await windowManager.executeAction(action);
-      
+
       // 最小化・復元後にアプリウィンドウにフォーカスを保つ
       if (result && (action.type === "minimize" || action.type === "restore")) {
         setTimeout(() => {
@@ -161,7 +161,7 @@ app.whenReady().then(async () => {
           }
         }, 100);
       }
-      
+
       return result;
     }
   );
@@ -181,9 +181,12 @@ app.whenReady().then(async () => {
 
         const success = await windowManager.executeAction(action);
         results.push(success);
-        
+
         // 各アクション後にフォーカスを維持
-        if (success && (action.type === "minimize" || action.type === "restore")) {
+        if (
+          success &&
+          (action.type === "minimize" || action.type === "restore")
+        ) {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.focus();
           }
@@ -203,7 +206,7 @@ app.whenReady().then(async () => {
       return results;
     }
   );
-  
+
   ipcMain.handle("quit-app", async (_, appName: string): Promise<boolean> => {
     console.log(`Quit app request: ${appName}`);
     return await windowManager.quitApp(appName);
