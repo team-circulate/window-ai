@@ -17,12 +17,18 @@ import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./windowManager";
 import { ClaudeService } from "./claudeService";
+import { AnalysisService } from "./analysisService";
+import { NotificationSystem } from "./notificationSystem";
+import { FocusLogger } from "./focusLogger";
 import { WindowState, WindowAction } from "./types";
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
+let analysisService: AnalysisService;
+let notificationSystem: NotificationSystem;
+let focusLogger: FocusLogger;
 let tray: Tray | null = null;
 
 // Trayアニメーション用の状態
@@ -110,6 +116,7 @@ function startMemoryMonitoring() {
   }
   memMonitorTimer = setInterval(check, 5000);
 }
+let analysisInterval: NodeJS.Timeout | null = null;
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -124,9 +131,16 @@ async function createWindow() {
     vibrancy: "sidebar",
     backgroundColor: "#00000000",
     alwaysOnTop: false,
+    show: false, // 最初は非表示にして、loadFile後に表示
   });
 
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
+
+  // ウィンドウは初期状態では非表示（メニューバーから制御）
+  // mainWindow.once('ready-to-show', () => {
+  //   mainWindow?.show();
+  //   mainWindow?.focus();
+  // });
 
   // ウィンドウを閉じる際の処理
   mainWindow.on("close", (event) => {
@@ -134,10 +148,10 @@ async function createWindow() {
     if (process.platform === "darwin") {
       event.preventDefault();
       mainWindow?.hide();
-      // Dockアイコンも非表示にする（オプション）
-      if (app.dock) {
-        app.dock.hide();
-      }
+      // Dockアイコンは表示したままにする
+      // if (app.dock) {
+      //   app.dock.hide();
+      // }
     }
   });
 
@@ -272,6 +286,22 @@ function createTray() {
   // コンテキストメニューの作成
   const contextMenu = Menu.buildFromTemplate([
     {
+      label: "メインウィンドウを表示",
+      accelerator: "Command+M",
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isVisible()) {
+            mainWindow.hide();
+          } else {
+            mainWindow.show();
+            mainWindow.focus();
+          }
+        } else {
+          createWindow();
+        }
+      },
+    },
+    {
       label: "Spotlight検索を開く",
       accelerator: "Option+Shift+W",
       click: () => {
@@ -305,6 +335,10 @@ function createTray() {
     {
       label: "ホットキー",
       submenu: [
+        {
+          label: "Command+M: メインウィンドウ表示/非表示",
+          enabled: false,
+        },
         {
           label: "Option+Shift+W: Spotlight検索を開く",
           enabled: false,
@@ -405,10 +439,13 @@ app.whenReady().then(async () => {
   }
 
   claudeService = new ClaudeService(apiKey || "");
+  analysisService = new AnalysisService(apiKey || "");
   windowManager = new WindowManager(claudeService);
+  focusLogger = new FocusLogger();
+  notificationSystem = new NotificationSystem(mainWindow || undefined);
 
-  // メインウィンドウは作成せず、Spotlightウィンドウのみを使用
-  // createWindow();
+  // メインウィンドウとトレイを作成
+  createWindow();
   createTray();
   
   // トレイアニメーションのプリロードと開始
@@ -421,6 +458,27 @@ app.whenReady().then(async () => {
   }
   
   // グローバルホットキーの登録
+  // Command+M でメインウィンドウの表示/非表示を切り替え
+  const mainWindowHotkey = 'Command+M';
+  const mainWindowHotkeyRegistered = globalShortcut.register(mainWindowHotkey, () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    } else {
+      createWindow();
+    }
+  });
+
+  if (!mainWindowHotkeyRegistered) {
+    console.error(`Failed to register hotkey: ${mainWindowHotkey}`);
+  } else {
+    console.log(`Global hotkey registered: ${mainWindowHotkey}`);
+  }
+
   // Option+Shift+W でSpotlightウィンドウの表示/非表示を切り替え
   const toggleWindowHotkey = 'Option+Shift+W';
   const hotkeyRegistered = globalShortcut.register(toggleWindowHotkey, () => {
@@ -475,6 +533,35 @@ app.whenReady().then(async () => {
   registerAppSwitchHotkey();
 
   
+  // リアルタイムアクティブアプリ監視 - 実際の入力フォーカスを追跡
+  let lastKnownActiveApp: string = '';
+  setInterval(async () => {
+    if (windowManager && mainWindow) {
+      try {
+        // 実際にフォーカスされているアプリを直接取得
+        const currentActiveApp = await windowManager.getCurrentActiveApp();
+        
+        // 前回と異なる場合のみ更新（不要な処理を避ける）
+        if (currentActiveApp !== lastKnownActiveApp) {
+          console.log(`🔄 Active app changed: ${lastKnownActiveApp} → ${currentActiveApp}`);
+          
+          // フォーカスロガーに変更を通知
+          await focusLogger.onFocusChange(currentActiveApp);
+          
+          lastKnownActiveApp = currentActiveApp;
+          
+          // フロントエンドにリアルタイム通知
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('active-app-changed', currentActiveApp);
+          }
+        }
+      } catch (error) {
+        // エラーが発生しても継続
+        console.error('Error in active app monitoring:', error);
+      }
+    }
+  }, 1000); // 1秒間隔でリアルタイム監視
+  
   // Trayのツールチップを定期的に更新（CPU使用率を表示）
   setInterval(async () => {
     if (tray && windowManager) {
@@ -517,6 +604,37 @@ app.whenReady().then(async () => {
   // アプリにフォーカスを移動
   ipcMain.handle("focus-app", async (_, appName: string): Promise<boolean> => {
     return await windowManager.focusApp(appName);
+  });
+
+  // AI分析を定期実行（5分間隔）
+  startAIAnalysis();
+
+  // アプリのフォーカス変更を検知してアクティブアプリ情報を更新
+  app.on('browser-window-focus', () => {
+    // Electronアプリがフォーカスされたとき
+    console.log('Electron app focused');
+  });
+
+  app.on('browser-window-blur', () => {
+    // Electronアプリがフォーカスを失ったとき
+    console.log('Electron app lost focus - updating active app info');
+    // フォーカスを失った後、少し待ってからアクティブアプリを更新
+    setTimeout(async () => {
+      if (mainWindow && windowManager) {
+        try {
+          // 新しいアクティブアプリを強制的に検出
+          const windowState = await windowManager.getWindowState();
+          console.log('Updated active app on blur:', windowState.activeApp);
+          
+          // IPCでフロントエンドにも通知（リアルタイム更新）
+          if (mainWindow) {
+            mainWindow.webContents.send('active-app-changed', windowState.activeApp);
+          }
+        } catch (error) {
+          console.error('Error updating active app on blur:', error);
+        }
+      }
+    }, 300); // 少し長めの待機時間
   });
 
   ipcMain.handle("get-window-state", async (): Promise<WindowState> => {
@@ -656,12 +774,139 @@ app.whenReady().then(async () => {
       return await windowManager.getMemoryInfo();
     }
   );
+
+  ipcMain.handle(
+    "get-focus-stats",
+    async () => {
+      console.log("Getting focus stats...");
+      try {
+        const stats = await focusLogger.getAllStats();
+        console.log("Loaded focus stats:", stats);
+        return stats;
+      } catch (error) {
+        console.error('Error getting focus stats:', error);
+        return [];
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-data-info",
+    async () => {
+      console.log("Getting data store info");
+      try {
+        return await focusLogger.getDataInfo();
+      } catch (error) {
+        console.error('Error getting data info:', error);
+        return null;
+      }
+    }
+  );
+
+  // 通知システム関連のIPCハンドラー
+  ipcMain.handle(
+    "get-notifications",
+    async () => {
+      try {
+        return await notificationSystem.loadNotifications();
+      } catch (error) {
+        console.error('Error getting notifications:', error);
+        return [];
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "mark-notification-read",
+    async (_, notificationId: string) => {
+      try {
+        await notificationSystem.markAsRead(notificationId);
+        return true;
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+        return false;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-notification-settings",
+    async () => {
+      try {
+        return await notificationSystem.getSettings();
+      } catch (error) {
+        console.error('Error getting notification settings:', error);
+        return {};
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "save-notification-settings",
+    async (_, settings) => {
+      try {
+        await notificationSystem.saveSettings(settings);
+        // 分析間隔を更新
+        await updateAnalysisInterval();
+        return true;
+      } catch (error) {
+        console.error('Error saving notification settings:', error);
+        return false;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-notification-stats",
+    async () => {
+      try {
+        return await notificationSystem.getNotificationStats();
+      } catch (error) {
+        console.error('Error getting notification stats:', error);
+        return {
+          totalNotifications: 0,
+          unreadCount: 0,
+          lastNotification: null,
+          avgSystemHealth: 100
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "quit-recommended-app",
+    async (_, appName: string) => {
+      try {
+        const success = await windowManager.quitApp(appName);
+        if (success) {
+          console.log(`✅ Successfully quit app: ${appName}`);
+        } else {
+          console.log(`❌ Failed to quit app: ${appName}`);
+        }
+        return success;
+      } catch (error) {
+        console.error(`Error quitting app ${appName}:`, error);
+        return false;
+      }
+    }
+  );
 });
 
 app.on("window-all-closed", () => {
   // macOSでは、Trayアイコンがあるため、すべてのウィンドウが閉じてもアプリを終了しない
   // 他のプラットフォームでも同様の動作にする（Trayアイコンで常駐）
   // app.quit()を呼ばないことで、アプリはバックグラウンドで動作し続ける
+});
+
+app.on("before-quit", () => {
+  // アプリ終了時にクリーンアップ
+  if (focusLogger) {
+    focusLogger.destroy();
+  }
+  if (analysisInterval) {
+    clearInterval(analysisInterval);
+    analysisInterval = null;
+  }
 });
 
 app.on("activate", () => {
@@ -675,3 +920,109 @@ app.on("will-quit", () => {
   // すべてのショートカットを解除
   globalShortcut.unregisterAll();
 });
+
+// AI分析機能
+async function startAIAnalysis() {
+  console.log("🤖 Starting AI analysis system...");
+  
+  // 初回実行は1分後（起動直後のデータ収集を待つ）
+  setTimeout(performAIAnalysis, 60000);
+  
+  // 設定から分析間隔を取得して定期実行を設定
+  await updateAnalysisInterval();
+}
+
+async function updateAnalysisInterval() {
+  if (analysisInterval) {
+    clearInterval(analysisInterval);
+    analysisInterval = null;
+  }
+
+  if (!notificationSystem) return;
+  
+  const settings = await notificationSystem.getSettings();
+  
+  if (settings.analysisInterval > 0) {
+    analysisInterval = setInterval(performAIAnalysis, settings.analysisInterval);
+    console.log(`⏰ Analysis interval set to ${settings.analysisInterval / 1000}s`);
+  } else {
+    console.log("🚫 AI analysis disabled by user settings");
+  }
+}
+
+async function performAIAnalysis() {
+  if (!analysisService || !focusLogger || !windowManager) {
+    console.log("⚠️ Analysis services not ready");
+    return;
+  }
+
+  try {
+    console.log("🔍 Performing AI analysis...");
+    
+    // 1. フォーカス統計データを取得
+    const focusStats = await focusLogger.getAllStats();
+    if (focusStats.length === 0) {
+      console.log("📊 No focus data available for analysis");
+      return;
+    }
+
+    // 2. CPU・メモリ情報を取得
+    const cpuInfo = await windowManager.getCpuInfo();
+    const processes = cpuInfo.processes;
+
+    // 3. 現在実行中のアプリ一覧を取得
+    const windowState = await windowManager.getWindowState();
+    const currentApps = [...new Set(windowState.windows.map(w => w.appName))];
+
+    console.log(`📊 Analyzing ${focusStats.length} apps, ${processes.length} processes`);
+
+    // 4. フォーカス分析を実行
+    console.log("🎯 Analyzing focus patterns...");
+    const focusAnalysis = await analysisService.analyzeFocusPatterns(focusStats);
+    console.log(`Found ${focusAnalysis.distractingApps.length} distracting apps`);
+
+    // 5. リソース分析を実行
+    console.log("⚡ Analyzing resource usage...");
+    const resourceAnalysis = await analysisService.analyzeResourceUsage(processes);
+    console.log(`Found ${resourceAnalysis.heavyResourceApps.length} heavy resource apps`);
+
+    // 6. 統合分析で閉じるべきアプリを特定
+    console.log("🔗 Performing integrated analysis...");
+    const recommendations = await analysisService.getIntegratedRecommendations(
+      focusAnalysis,
+      resourceAnalysis,
+      currentApps
+    );
+
+    // appsToCloseが配列であることを確認
+    const appsToClose = Array.isArray(recommendations.appsToClose) ? recommendations.appsToClose : [];
+    
+    console.log(`✅ Analysis complete: ${appsToClose.length} apps recommended to close`);
+    console.log(`📈 System health score: ${recommendations.systemHealthScore}/100`);
+    
+    // 結果をログに出力（デバッグ用）
+    if (appsToClose.length > 0) {
+      console.log("🎯 Apps recommended to close:");
+      appsToClose.forEach(app => {
+        console.log(`  - ${app.appName} (${app.priority}): ${app.expectedBenefit}`);
+        console.log(`    Reasons: ${Array.isArray(app.reasons) ? app.reasons.join(', ') : 'No reasons provided'}`);
+      });
+    }
+
+    console.log("💡 Overall assessment:", recommendations.overallAssessment);
+
+    // 通知システムに結果を送信
+    if (notificationSystem) {
+      // 安全な形式で通知を送信
+      const safeRecommendations = {
+        ...recommendations,
+        appsToClose: appsToClose
+      };
+      await notificationSystem.sendAnalysisNotification(safeRecommendations);
+    }
+
+  } catch (error) {
+    console.error("❌ AI analysis error:", error);
+  }
+}
+

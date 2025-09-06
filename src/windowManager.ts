@@ -9,6 +9,7 @@ const execAsync = promisify(exec);
 
 export class WindowManager {
   private claudeService?: any; // ClaudeServiceのインスタンス
+  private lastActiveApp?: string; // 前回のアクティブアプリを記憶
   
   constructor(claudeService?: any) {
     this.claudeService = claudeService;
@@ -209,10 +210,114 @@ export class WindowManager {
   }
 
   private async getActiveApp(): Promise<string> {
-    return await run<string>(() => {
-      const se = Application("System Events");
-      return se.processes.whose({ frontmost: true })[0].name();
-    });
+    try {
+      // osascriptを使って外部プロセスからアクティブアプリを取得
+      const { stdout } = await execAsync(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`);
+      const appName = stdout.trim();
+      
+      console.log('Current active app (raw):', appName);
+      
+      // Electronアプリ自体の場合の処理
+      if (appName === 'Electron' || appName === 'Window AI Manager') {
+        // Electronがフォーカスされている時は、最新の「前のアクティブアプリ」を探す
+        console.log('Electron is focused - checking for actual active app');
+        const currentActiveApp = await this.getRealActiveApp();
+        
+        if (currentActiveApp && currentActiveApp !== 'Electron' && currentActiveApp !== 'Window AI Manager') {
+          console.log('Real active app detected:', currentActiveApp);
+          this.lastActiveApp = currentActiveApp;
+          return currentActiveApp;
+        }
+        
+        // 見つからなければ前回の値を使用
+        return this.lastActiveApp || 'Window AI Manager (フォーカス中)';
+      }
+      
+      // 有効なアプリ名なら保存して返す
+      this.lastActiveApp = appName;
+      return appName;
+      
+    } catch (error) {
+      console.error('Error getting active app:', error);
+      return 'Unknown';
+    }
+  }
+
+  private async getRealActiveApp(): Promise<string | null> {
+    try {
+      // より詳細な方法で実際にアクティブなアプリを取得
+      // 最近アクティブになったプロセスを確認
+      const { stdout } = await execAsync(`osascript -e '
+        tell application "System Events"
+          set allProcs to (every process whose visible is true)
+          set activeProc to ""
+          
+          -- フロントモストではない、最も最近使用されたプロセスを探す
+          repeat with proc in allProcs
+            set procName to name of proc
+            if procName is not "Electron" and procName is not "Window AI Manager" then
+              set activeProc to procName
+              exit repeat
+            end if
+          end repeat
+          
+          return activeProc
+        end tell
+      '`);
+      
+      const realApp = stdout.trim();
+      console.log('Real active app search result:', realApp);
+      return realApp !== '' ? realApp : null;
+    } catch (error) {
+      console.error('Error getting real active app:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 実際に現在フォーカスされているアプリを取得（定期監視用）
+   */
+  async getCurrentActiveApp(): Promise<string> {
+    try {
+      // 直接的にフロントモストアプリを取得
+      const { stdout } = await execAsync(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`);
+      const currentApp = stdout.trim();
+      
+      // Electronアプリ以外なら、そのまま返す
+      if (currentApp !== 'Electron' && currentApp !== 'Window AI Manager') {
+        return currentApp;
+      }
+      
+      // ElectronがフォーカスされているならWindow AI Managerと表示
+      return 'Window AI Manager';
+      
+    } catch (error) {
+      console.error('Error getting current active app:', error);
+      return 'Unknown';
+    }
+  }
+
+  private async getPreviousActiveApp(): Promise<string | null> {
+    try {
+      // 過去数秒間のアクティブアプリ履歴を確認（簡易版）
+      // 実際には、最近使用したアプリケーションを取得
+      const { stdout } = await execAsync(`osascript -e '
+        tell application "System Events"
+          set recentApps to {}
+          repeat with proc in (processes whose background only is false)
+            set end of recentApps to name of proc
+          end repeat
+          return item 2 of recentApps
+        end tell
+      '`);
+      
+      const recentApp = stdout.trim();
+      console.log('Recent app found:', recentApp);
+      return recentApp;
+    } catch (error) {
+      console.error('Error getting previous active app:', error);
+      return null;
+    }
   }
 
   async executeAction(action: WindowAction): Promise<boolean> {
