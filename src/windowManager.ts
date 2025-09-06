@@ -1055,15 +1055,16 @@ export class WindowManager {
       const processes = await this.getTopProcessesWithFallback();
 
       // プロセスの説明をAIで生成
-      const processesWithDescriptions = await this.addProcessDescriptions(
-        processes
-      );
+      // const processesWithDescriptions = await this.addProcessDescriptions(
+      //   processes
+      // );
 
       return {
         model,
         cores,
         usage,
-        processes: processesWithDescriptions,
+        // processes: processesWithDescriptions, 無効。トークンを大量に消費するので
+        processes: processes,
       };
     } catch (error) {
       console.error("Error getting CPU info:", error);

@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { app } from 'electron';
-import { FocusSession, AppStats } from './types';
+import * as fs from "fs";
+import * as path from "path";
+import { app } from "electron";
+import { FocusSession, AppStats } from "./types";
 
 export class DataStore {
   private dataDir: string;
@@ -10,10 +10,10 @@ export class DataStore {
 
   constructor() {
     // アプリのユーザーデータディレクトリを取得
-    this.dataDir = path.join(app.getPath('userData'), 'focus-data');
-    this.focusLogFile = path.join(this.dataDir, 'focus-sessions.json');
-    this.statsFile = path.join(this.dataDir, 'app-stats.json');
-    
+    this.dataDir = path.join(app.getPath("userData"), "focus-data");
+    this.focusLogFile = path.join(this.dataDir, "focus-sessions.json");
+    this.statsFile = path.join(this.dataDir, "app-stats.json");
+
     // ディレクトリを作成（存在しない場合）
     this.ensureDataDirectory();
   }
@@ -21,7 +21,6 @@ export class DataStore {
   private ensureDataDirectory(): void {
     if (!fs.existsSync(this.dataDir)) {
       fs.mkdirSync(this.dataDir, { recursive: true });
-      console.log('📁 Focus data directory created:', this.dataDir);
     }
   }
 
@@ -32,19 +31,19 @@ export class DataStore {
     try {
       const sessions = await this.loadFocusSessions();
       sessions.push(session);
-      
+
       // 古いデータをクリーンアップ（30日以上前のデータを削除）
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-      const filteredSessions = sessions.filter(s => s.startTime > thirtyDaysAgo);
-      
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const filteredSessions = sessions.filter(
+        (s) => s.startTime > thirtyDaysAgo
+      );
+
       await fs.promises.writeFile(
-        this.focusLogFile, 
+        this.focusLogFile,
         JSON.stringify(filteredSessions, null, 2)
       );
-      
-      console.log(`💾 Focus session saved: ${session.appName} (${session.duration}s)`);
     } catch (error) {
-      console.error('Error saving focus session:', error);
+      console.error("Error saving focus session:", error);
     }
   }
 
@@ -56,11 +55,11 @@ export class DataStore {
       if (!fs.existsSync(this.focusLogFile)) {
         return [];
       }
-      
-      const data = await fs.promises.readFile(this.focusLogFile, 'utf8');
+
+      const data = await fs.promises.readFile(this.focusLogFile, "utf8");
       return JSON.parse(data);
     } catch (error) {
-      console.error('Error loading focus sessions:', error);
+      console.error("Error loading focus sessions:", error);
       return [];
     }
   }
@@ -71,13 +70,11 @@ export class DataStore {
   async saveAppStats(stats: AppStats[]): Promise<void> {
     try {
       await fs.promises.writeFile(
-        this.statsFile, 
+        this.statsFile,
         JSON.stringify(stats, null, 2)
       );
-      
-      console.log(`📊 App stats saved: ${stats.length} apps`);
     } catch (error) {
-      console.error('Error saving app stats:', error);
+      console.error("Error saving app stats:", error);
     }
   }
 
@@ -89,11 +86,11 @@ export class DataStore {
       if (!fs.existsSync(this.statsFile)) {
         return [];
       }
-      
-      const data = await fs.promises.readFile(this.statsFile, 'utf8');
+
+      const data = await fs.promises.readFile(this.statsFile, "utf8");
       return JSON.parse(data);
     } catch (error) {
-      console.error('Error loading app stats:', error);
+      console.error("Error loading app stats:", error);
       return [];
     }
   }
@@ -101,10 +98,13 @@ export class DataStore {
   /**
    * 特定期間のフォーカスセッションを取得
    */
-  async getFocusSessionsByDate(startDate: string, endDate?: string): Promise<FocusSession[]> {
+  async getFocusSessionsByDate(
+    startDate: string,
+    endDate?: string
+  ): Promise<FocusSession[]> {
     const sessions = await this.loadFocusSessions();
-    
-    return sessions.filter(session => {
+
+    return sessions.filter((session) => {
       if (endDate) {
         return session.date >= startDate && session.date <= endDate;
       } else {
@@ -118,7 +118,7 @@ export class DataStore {
    */
   async getAppStatsByName(appName: string): Promise<AppStats | null> {
     const stats = await this.loadAppStats();
-    return stats.find(stat => stat.appName === appName) || null;
+    return stats.find((stat) => stat.appName === appName) || null;
   }
 
   /**
@@ -132,26 +132,26 @@ export class DataStore {
   }> {
     const sessions = await this.loadFocusSessions();
     const stats = await this.loadAppStats();
-    
+
     // ファイルサイズを計算
     let totalSize = 0;
     try {
-      const focusLogStats = fs.existsSync(this.focusLogFile) 
-        ? await fs.promises.stat(this.focusLogFile) 
+      const focusLogStats = fs.existsSync(this.focusLogFile)
+        ? await fs.promises.stat(this.focusLogFile)
         : { size: 0 };
-      const statsFileStats = fs.existsSync(this.statsFile) 
-        ? await fs.promises.stat(this.statsFile) 
+      const statsFileStats = fs.existsSync(this.statsFile)
+        ? await fs.promises.stat(this.statsFile)
         : { size: 0 };
       totalSize = focusLogStats.size + statsFileStats.size;
     } catch (error) {
-      console.error('Error calculating data size:', error);
+      console.error("Error calculating data size:", error);
     }
 
     return {
       totalSessions: sessions.length,
       totalApps: stats.length,
       dataSize: `${Math.round(totalSize / 1024)}KB`,
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
   }
 }

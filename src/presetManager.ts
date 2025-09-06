@@ -1,6 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { app } from 'electron';
+import * as fs from "fs";
+import * as path from "path";
+import { app } from "electron";
 
 export interface WindowPreset {
   appName: string;
@@ -28,24 +28,25 @@ export class PresetManager {
   private presets: Map<string, Preset>;
 
   constructor() {
-    const userDataPath = app.getPath('userData');
-    this.presetsPath = path.join(userDataPath, 'presets.json');
+    const userDataPath = app.getPath("userData");
+    this.presetsPath = path.join(userDataPath, "presets.json");
     this.presets = new Map();
     this.loadPresets();
   }
 
   private loadPresets(): void {
     try {
+      // 既存の内容をクリアしてから読み込む
+      this.presets = new Map();
       if (fs.existsSync(this.presetsPath)) {
-        const data = fs.readFileSync(this.presetsPath, 'utf-8');
+        const data = fs.readFileSync(this.presetsPath, "utf-8");
         const presetsArray: Preset[] = JSON.parse(data);
-        presetsArray.forEach(preset => {
+        presetsArray.forEach((preset) => {
           this.presets.set(preset.id, preset);
         });
-        console.log(`Loaded ${this.presets.size} presets`);
       }
     } catch (error) {
-      console.error('Failed to load presets:', error);
+      // 失敗した場合は空で初期化
       this.presets = new Map();
     }
   }
@@ -54,25 +55,28 @@ export class PresetManager {
     try {
       const presetsArray = Array.from(this.presets.values());
       fs.writeFileSync(this.presetsPath, JSON.stringify(presetsArray, null, 2));
-      console.log('Presets saved successfully');
     } catch (error) {
-      console.error('Failed to save presets:', error);
+      // 保存失敗時は何もしない（ログは抑制）
     }
   }
 
-  public createPreset(name: string, description: string | undefined, windows: WindowPreset[]): Preset {
+  public createPreset(
+    name: string,
+    description: string | undefined,
+    windows: WindowPreset[]
+  ): Preset {
     const preset: Preset = {
       id: `preset_${Date.now()}`,
       name,
       description,
       windows,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     this.presets.set(preset.id, preset);
     this.savePresets();
-    
+
     return preset;
   }
 
@@ -85,12 +89,12 @@ export class PresetManager {
     const updatedPreset = {
       ...preset,
       ...updates,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     this.presets.set(id, updatedPreset);
     this.savePresets();
-    
+
     return updatedPreset;
   }
 
@@ -107,8 +111,10 @@ export class PresetManager {
   }
 
   public getAllPresets(): Preset[] {
-    return Array.from(this.presets.values())
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    return Array.from(this.presets.values()).sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
   }
 
   public clearAllPresets(): void {

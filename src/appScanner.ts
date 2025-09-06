@@ -147,8 +147,10 @@ export class AppScanner {
     try {
       // まずインストール済みアプリから探す
       const apps = await this.getAllInstalledApps();
-      const app = apps.find(a => a.name.toLowerCase() === appName.toLowerCase());
-      
+      const app = apps.find(
+        (a) => a.name.toLowerCase() === appName.toLowerCase()
+      );
+
       if (app && app.path) {
         // macOSのopenコマンドでアプリを起動
         const { stdout, stderr } = await execAsync(`open "${app.path}"`);
@@ -156,10 +158,9 @@ export class AppScanner {
           console.error(`Error launching ${appName}:`, stderr);
           return false;
         }
-        console.log(`Successfully launched ${appName}`);
         return true;
       }
-      
+
       // 見つからない場合は直接起動を試みる
       const { stdout, stderr } = await execAsync(`open -a "${appName}"`);
       if (stderr) {

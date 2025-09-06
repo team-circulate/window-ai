@@ -5,11 +5,11 @@ export interface FocusAnalysisResult {
   distractingApps: Array<{
     appName: string;
     reason: string;
-    severity: 'high' | 'medium' | 'low';
+    severity: "high" | "medium" | "low";
   }>;
   productivityInsights: Array<{
     insight: string;
-    category: 'focus' | 'time_management' | 'workflow';
+    category: "focus" | "time_management" | "workflow";
   }>;
   recommendations: Array<{
     action: string;
@@ -22,7 +22,7 @@ export interface ResourceAnalysisResult {
     appName: string;
     cpuUsage: number;
     memoryUsage: number;
-    impact: 'critical' | 'high' | 'medium' | 'low';
+    impact: "critical" | "high" | "medium" | "low";
     reason: string;
   }>;
   systemRecommendations: Array<{
@@ -34,13 +34,20 @@ export interface ResourceAnalysisResult {
 export interface AppCloseRecommendation {
   appName: string;
   reasons: string[];
-  priority: 'urgent' | 'high' | 'medium' | 'low';
+  priority: "urgent" | "high" | "medium" | "low";
   expectedBenefit: string;
   safeToClose: boolean;
 }
 
+export interface WindowLayoutRecommendation {
+  appName: string;
+  position: string;
+  reason: string;
+}
+
 export interface IntegratedAnalysisResult {
   appsToClose: AppCloseRecommendation[];
+  windowLayout?: WindowLayoutRecommendation[];
   overallAssessment: string;
   systemHealthScore: number; // 0-100
 }
@@ -57,7 +64,9 @@ export class AnalysisService {
   /**
    * フォーカスアプリの使用パターンを分析
    */
-  async analyzeFocusPatterns(focusStats: AppStats[]): Promise<FocusAnalysisResult> {
+  async analyzeFocusPatterns(
+    focusStats: AppStats[]
+  ): Promise<FocusAnalysisResult> {
     const systemPrompt = `あなたは生産性分析の専門家です。ユーザーのアプリ使用統計を分析して、集中力を妨げるアプリや改善点を特定してください。
 
 以下の観点から分析してください：
@@ -76,64 +85,83 @@ export class AnalysisService {
 回答は日本語で行い、実用的で納得感のあるアドバイスを提供してください。`;
 
     const userMessage = `アプリ使用統計データ：
-${focusStats.map(stat => 
-  `- ${stat.appName}: 総使用時間${Math.round(stat.totalFocusTime/60)}分, セッション数${stat.totalSessions}, 平均セッション${Math.round(stat.averageSessionTime/60)}分`
-).join('\n')}
+${focusStats
+  .map(
+    (stat) =>
+      `- ${stat.appName}: 総使用時間${Math.round(
+        stat.totalFocusTime / 60
+      )}分, セッション数${stat.totalSessions}, 平均セッション${Math.round(
+        stat.averageSessionTime / 60
+      )}分`
+  )
+  .join("\n")}
 
 この使用パターンを分析して、集中力を妨げるアプリと改善提案を教えてください。`;
 
     try {
       const response = await this.anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 1500,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 20000,
         temperature: 0.3,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-        tools: [{
-          name: "focus_analysis",
-          description: "フォーカス分析結果を提供",
-          input_schema: {
-            type: "object",
-            properties: {
-              distractingApps: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    appName: { type: "string" },
-                    reason: { type: "string" },
-                    severity: { type: "string", enum: ["high", "medium", "low"] }
+        tools: [
+          {
+            name: "focus_analysis",
+            description: "フォーカス分析結果を提供",
+            input_schema: {
+              type: "object",
+              properties: {
+                distractingApps: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      appName: { type: "string" },
+                      reason: { type: "string" },
+                      severity: {
+                        type: "string",
+                        enum: ["high", "medium", "low"],
+                      },
+                    },
+                    required: ["appName", "reason", "severity"],
                   },
-                  required: ["appName", "reason", "severity"]
-                }
+                },
+                productivityInsights: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      insight: { type: "string" },
+                      category: {
+                        type: "string",
+                        enum: ["focus", "time_management", "workflow"],
+                      },
+                    },
+                    required: ["insight", "category"],
+                  },
+                },
+                recommendations: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      action: { type: "string" },
+                      benefit: { type: "string" },
+                    },
+                    required: ["action", "benefit"],
+                  },
+                },
               },
-              productivityInsights: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    insight: { type: "string" },
-                    category: { type: "string", enum: ["focus", "time_management", "workflow"] }
-                  },
-                  required: ["insight", "category"]
-                }
-              },
-              recommendations: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    action: { type: "string" },
-                    benefit: { type: "string" }
-                  },
-                  required: ["action", "benefit"]
-                }
-              }
+              required: [
+                "distractingApps",
+                "productivityInsights",
+                "recommendations",
+              ],
             },
-            required: ["distractingApps", "productivityInsights", "recommendations"]
-          }
-        }],
-        tool_choice: { type: "tool", name: "focus_analysis" }
+          },
+        ],
+        tool_choice: { type: "tool", name: "focus_analysis" },
       });
 
       const toolUse = response.content.find(
@@ -148,7 +176,7 @@ ${focusStats.map(stat =>
       return {
         distractingApps: [],
         productivityInsights: [],
-        recommendations: []
+        recommendations: [],
       };
     } catch (error) {
       console.error("Focus analysis error:", error);
@@ -159,7 +187,9 @@ ${focusStats.map(stat =>
   /**
    * CPU・メモリ使用量を分析
    */
-  async analyzeResourceUsage(processes: ProcessInfo[]): Promise<ResourceAnalysisResult> {
+  async analyzeResourceUsage(
+    processes: ProcessInfo[]
+  ): Promise<ResourceAnalysisResult> {
     const systemPrompt = `あなたはシステムパフォーマンスの専門家です。macOSのプロセス情報を分析して、リソース使用量が多いアプリを特定し、システム最適化の提案を行ってください。
 
 以下の観点から分析してください：
@@ -178,55 +208,74 @@ ${focusStats.map(stat =>
 実用的で安全な最適化提案を日本語で提供してください。`;
 
     const userMessage = `現在のプロセス情報：
-${processes.slice(0, 20).map(proc => 
-  `- ${proc.name}: CPU ${proc.cpuUsage.toFixed(1)}%, メモリ ${proc.memoryUsage.toFixed(0)}MB${proc.description ? ` (${proc.description})` : ''}`
-).join('\n')}
+${processes
+  .slice(0, 20)
+  .map(
+    (proc) =>
+      `- ${proc.name}: CPU ${proc.cpuUsage.toFixed(
+        1
+      )}%, メモリ ${proc.memoryUsage.toFixed(0)}MB${
+        proc.description ? ` (${proc.description})` : ""
+      }`
+  )
+  .join("\n")}
 
 このリソース使用状況を分析して、最適化提案を教えてください。`;
 
     try {
       const response = await this.anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 1500,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 20000,
         temperature: 0.3,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-        tools: [{
-          name: "resource_analysis",
-          description: "リソース分析結果を提供",
-          input_schema: {
-            type: "object",
-            properties: {
-              heavyResourceApps: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    appName: { type: "string" },
-                    cpuUsage: { type: "number" },
-                    memoryUsage: { type: "number" },
-                    impact: { type: "string", enum: ["critical", "high", "medium", "low"] },
-                    reason: { type: "string" }
+        tools: [
+          {
+            name: "resource_analysis",
+            description: "リソース分析結果を提供",
+            input_schema: {
+              type: "object",
+              properties: {
+                heavyResourceApps: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      appName: { type: "string" },
+                      cpuUsage: { type: "number" },
+                      memoryUsage: { type: "number" },
+                      impact: {
+                        type: "string",
+                        enum: ["critical", "high", "medium", "low"],
+                      },
+                      reason: { type: "string" },
+                    },
+                    required: [
+                      "appName",
+                      "cpuUsage",
+                      "memoryUsage",
+                      "impact",
+                      "reason",
+                    ],
                   },
-                  required: ["appName", "cpuUsage", "memoryUsage", "impact", "reason"]
-                }
+                },
+                systemRecommendations: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      action: { type: "string" },
+                      expectedImprovement: { type: "string" },
+                    },
+                    required: ["action", "expectedImprovement"],
+                  },
+                },
               },
-              systemRecommendations: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    action: { type: "string" },
-                    expectedImprovement: { type: "string" }
-                  },
-                  required: ["action", "expectedImprovement"]
-                }
-              }
+              required: ["heavyResourceApps", "systemRecommendations"],
             },
-            required: ["heavyResourceApps", "systemRecommendations"]
-          }
-        }],
-        tool_choice: { type: "tool", name: "resource_analysis" }
+          },
+        ],
+        tool_choice: { type: "tool", name: "resource_analysis" },
       });
 
       const toolUse = response.content.find(
@@ -240,7 +289,7 @@ ${processes.slice(0, 20).map(proc =>
 
       return {
         heavyResourceApps: [],
-        systemRecommendations: []
+        systemRecommendations: [],
       };
     } catch (error) {
       console.error("Resource analysis error:", error);
@@ -273,55 +322,95 @@ ${processes.slice(0, 20).map(proc =>
 
 重要：必ずintegrated_analysisツールを使用して結果を返してください。テキストでの回答は不要です。
 
+追加タスク：
+1. 閉じるべきアプリの提案に加えて、残すアプリのウィンドウ配置最適化も提案してください
+2. 配置提案は具体的に（例：「画面左半分」「画面右上1/4」など）
+3. 配置の理由も明確に（例：「コード編集とブラウザを並べて効率的に作業」）
+
 目標：「快適なMac生活」のための実用的で安全な提案を日本語で行う。`;
 
     const userMessage = `フォーカス分析結果：
 集中力を妨げるアプリ：
-${focusAnalysis.distractingApps.map(app => `- ${app.appName} (${app.severity}): ${app.reason}`).join('\n')}
+${focusAnalysis.distractingApps
+  .map((app) => `- ${app.appName} (${app.severity}): ${app.reason}`)
+  .join("\n")}
 
 リソース分析結果：
 重いアプリ：
-${resourceAnalysis.heavyResourceApps.map(app => `- ${app.appName} (CPU: ${app.cpuUsage}%, RAM: ${app.memoryUsage}MB, ${app.impact}): ${app.reason}`).join('\n')}
+${resourceAnalysis.heavyResourceApps
+  .map(
+    (app) =>
+      `- ${app.appName} (CPU: ${app.cpuUsage}%, RAM: ${app.memoryUsage}MB, ${app.impact}): ${app.reason}`
+  )
+  .join("\n")}
 
 現在実行中のアプリ：
-${currentApps.join(', ')}
+${currentApps.join(", ")}
 
 これらの情報を統合して、実際に閉じるべきアプリとその理由を教えてください。`;
 
     try {
+      const startTime = Date.now();
       const response = await this.anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 2000,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 20000,
         temperature: 0.3,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-        tools: [{
-          name: "integrated_analysis",
-          description: "統合分析結果を提供",
-          input_schema: {
-            type: "object",
-            properties: {
-              appsToClose: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    appName: { type: "string" },
-                    reasons: { type: "array", items: { type: "string" } },
-                    priority: { type: "string", enum: ["urgent", "high", "medium", "low"] },
-                    expectedBenefit: { type: "string" },
-                    safeToClose: { type: "boolean" }
+        tools: [
+          {
+            name: "integrated_analysis",
+            description: "統合分析結果を提供",
+            input_schema: {
+              type: "object",
+              properties: {
+                appsToClose: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      appName: { type: "string" },
+                      reasons: { type: "array", items: { type: "string" } },
+                      priority: {
+                        type: "string",
+                        enum: ["urgent", "high", "medium", "low"],
+                      },
+                      expectedBenefit: { type: "string" },
+                      safeToClose: { type: "boolean" },
+                    },
+                    required: [
+                      "appName",
+                      "reasons",
+                      "priority",
+                      "expectedBenefit",
+                      "safeToClose",
+                    ],
                   },
-                  required: ["appName", "reasons", "priority", "expectedBenefit", "safeToClose"]
-                }
+                },
+                windowLayout: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      appName: { type: "string" },
+                      position: { type: "string" },
+                      reason: { type: "string" },
+                    },
+                    required: ["appName", "position", "reason"],
+                  },
+                },
+                overallAssessment: { type: "string" },
+                systemHealthScore: { type: "number", minimum: 0, maximum: 100 },
               },
-              overallAssessment: { type: "string" },
-              systemHealthScore: { type: "number", minimum: 0, maximum: 100 }
+              required: [
+                "appsToClose",
+                "overallAssessment",
+                "systemHealthScore",
+              ],
             },
-            required: ["appsToClose", "overallAssessment", "systemHealthScore"]
-          }
-        }],
-        tool_choice: { type: "tool", name: "integrated_analysis" }
+          },
+        ],
+        tool_choice: { type: "tool", name: "integrated_analysis" },
       });
 
       const toolUse = response.content.find(
@@ -329,25 +418,31 @@ ${currentApps.join(', ')}
           content.type === "tool_use" && content.name === "integrated_analysis"
       );
 
-      console.log("🔍 AI Response Debug:");
-      console.log("- Response content:", JSON.stringify(response.content, null, 2));
-      console.log("- Tool use found:", !!toolUse);
-      if (toolUse) {
-        console.log("- Tool use input:", JSON.stringify(toolUse.input, null, 2));
-      }
-
       if (toolUse && typeof toolUse.input === "object") {
         const result = toolUse.input as any;
-        console.log("🔍 Parsed result:");
-        console.log("- appsToClose:", result.appsToClose);
-        console.log("- overallAssessment:", result.overallAssessment);
-        console.log("- systemHealthScore:", result.systemHealthScore);
-        
         // 型安全性を確保
         return {
-          appsToClose: Array.isArray(result.appsToClose) ? result.appsToClose : [],
-          overallAssessment: typeof result.overallAssessment === "string" ? result.overallAssessment : this.generateFallbackAssessment(focusAnalysis, resourceAnalysis, currentApps),
-          systemHealthScore: typeof result.systemHealthScore === "number" ? result.systemHealthScore : this.calculateFallbackHealthScore(focusAnalysis, resourceAnalysis)
+          appsToClose: Array.isArray(result.appsToClose)
+            ? result.appsToClose
+            : [],
+          windowLayout: Array.isArray(result.windowLayout)
+            ? result.windowLayout
+            : undefined,
+          overallAssessment:
+            typeof result.overallAssessment === "string"
+              ? result.overallAssessment
+              : this.generateFallbackAssessment(
+                  focusAnalysis,
+                  resourceAnalysis,
+                  currentApps
+                ),
+          systemHealthScore:
+            typeof result.systemHealthScore === "number"
+              ? result.systemHealthScore
+              : this.calculateFallbackHealthScore(
+                  focusAnalysis,
+                  resourceAnalysis
+                ),
         };
       }
 
@@ -356,26 +451,44 @@ ${currentApps.join(', ')}
         (content: any): content is Anthropic.Messages.TextBlock =>
           content.type === "text"
       );
-      
+
       if (textResponse && typeof textResponse.text === "string") {
-        console.log("⚠️ AI returned text instead of tool format:", textResponse.text);
         // テキストからアプリ名を抽出してフォールバック処理
-        return this.parseTextResponse(textResponse.text, focusAnalysis, resourceAnalysis, currentApps);
+        return this.parseTextResponse(
+          textResponse.text,
+          focusAnalysis,
+          resourceAnalysis,
+          currentApps
+        );
       }
 
       return {
         appsToClose: [],
-        overallAssessment: this.generateFallbackAssessment(focusAnalysis, resourceAnalysis, currentApps),
-        systemHealthScore: this.calculateFallbackHealthScore(focusAnalysis, resourceAnalysis)
+        overallAssessment: this.generateFallbackAssessment(
+          focusAnalysis,
+          resourceAnalysis,
+          currentApps
+        ),
+        systemHealthScore: this.calculateFallbackHealthScore(
+          focusAnalysis,
+          resourceAnalysis
+        ),
       };
     } catch (error) {
       console.error("Integrated analysis error:", error);
-      
+
       // エラーが発生した場合でも、基本的な分析結果を返す
       return {
         appsToClose: [],
-        overallAssessment: this.generateFallbackAssessment(focusAnalysis, resourceAnalysis, currentApps),
-        systemHealthScore: this.calculateFallbackHealthScore(focusAnalysis, resourceAnalysis)
+        overallAssessment: this.generateFallbackAssessment(
+          focusAnalysis,
+          resourceAnalysis,
+          currentApps
+        ),
+        systemHealthScore: this.calculateFallbackHealthScore(
+          focusAnalysis,
+          resourceAnalysis
+        ),
       };
     }
   }
@@ -398,18 +511,23 @@ ${currentApps.join(', ')}
     }
 
     let assessment = "システムの状態を確認しました。";
-    
+
     if (distractingCount > 0) {
-      const distractingApps = focusAnalysis.distractingApps.map(app => app.appName).join('、');
+      const distractingApps = focusAnalysis.distractingApps
+        .map((app) => app.appName)
+        .join("、");
       assessment += `集中力を妨げるアプリ（${distractingApps}）が検出されました。`;
     }
-    
+
     if (heavyResourceCount > 0) {
-      const heavyApps = resourceAnalysis.heavyResourceApps.map(app => app.appName).join('、');
+      const heavyApps = resourceAnalysis.heavyResourceApps
+        .map((app) => app.appName)
+        .join("、");
       assessment += `リソースを多く使用しているアプリ（${heavyApps}）があります。`;
     }
 
-    assessment += "作業効率を向上させるために、使用していないアプリの終了を検討してください。";
+    assessment +=
+      "作業効率を向上させるために、使用していないアプリの終了を検討してください。";
 
     return assessment;
   }
@@ -423,16 +541,16 @@ ${currentApps.join(', ')}
   ): number {
     const distractingCount = focusAnalysis.distractingApps.length;
     const heavyResourceCount = resourceAnalysis.heavyResourceApps.length;
-    
+
     // 基本的なスコア計算
     let score = 100;
-    
+
     // 集中力を妨げるアプリによる減点
     score -= distractingCount * 15;
-    
+
     // 重いリソース使用アプリによる減点
     score -= heavyResourceCount * 10;
-    
+
     // スコアを50-100の範囲に制限
     return Math.max(50, Math.min(100, score));
   }
@@ -446,31 +564,35 @@ ${currentApps.join(', ')}
     resourceAnalysis: ResourceAnalysisResult,
     currentApps: string[]
   ): IntegratedAnalysisResult {
-    console.log("🔍 Parsing text response:", text);
-    
     // テキストからアプリ名を抽出
     const appsToClose: any[] = [];
-    
+
     // 推奨アクションからアプリ名を抽出
-    const actionMatch = text.match(/推奨アクション：\s*([\s\S]*?)(?=注意点：|$)/);
+    const actionMatch = text.match(
+      /推奨アクション：\s*([\s\S]*?)(?=注意点：|$)/
+    );
     if (actionMatch) {
       const actions = actionMatch[1];
-      
+
       // 各アクションからアプリ名を抽出
-      const lines = actions.split('\n').filter(line => line.trim());
-      
+      const lines = actions.split("\n").filter((line) => line.trim());
+
       for (const line of lines) {
         // 数字付きのリスト項目を処理
         const match = line.match(/^\d+\.\s*(.+)/);
         if (match) {
           const actionText = match[1];
-          
+
           // アプリ名を抽出（例：「Cursorです」「Teracyも」）
-          const appMatches = actionText.match(/([A-Za-z][A-Za-z0-9\s]*?)(?:です|も|は|が|を|の)/g);
+          const appMatches = actionText.match(
+            /([A-Za-z][A-Za-z0-9\s]*?)(?:です|も|は|が|を|の)/g
+          );
           if (appMatches) {
             for (const appMatch of appMatches) {
-              const appName = appMatch.replace(/です|も|は|が|を|の$/, '').trim();
-              
+              const appName = appMatch
+                .replace(/です|も|は|が|を|の$/, "")
+                .trim();
+
               // 現在のアプリリストに存在するかチェック
               if (currentApps.includes(appName)) {
                 appsToClose.push({
@@ -478,7 +600,7 @@ ${currentApps.join(', ')}
                   reasons: ["AI分析による推奨"],
                   priority: "medium",
                   expectedBenefit: "システムパフォーマンスの改善",
-                  safeToClose: true
+                  safeToClose: true,
                 });
               }
             }
@@ -486,13 +608,14 @@ ${currentApps.join(', ')}
         }
       }
     }
-    
-    console.log("🔍 Extracted apps to close:", appsToClose);
-    
+
     return {
       appsToClose: appsToClose,
       overallAssessment: text,
-      systemHealthScore: this.calculateFallbackHealthScore(focusAnalysis, resourceAnalysis)
+      systemHealthScore: this.calculateFallbackHealthScore(
+        focusAnalysis,
+        resourceAnalysis
+      ),
     };
   }
 }

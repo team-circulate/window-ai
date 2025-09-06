@@ -479,18 +479,7 @@ app.whenReady().then(async () => {
   // オンボーディング状態をチェック
   const needsOnboarding = !graphManager.isOnboardingCompleted();
 
-  // メインウィンドウとトレイを作成
-  createWindow(needsOnboarding);
-  createTray();
-
-  // トレイアニメーションのプリロードと開始
-  trayAnimFrames = loadTrayAnimFrames();
-  if (trayAnimFrames.length > 0) {
-    startTrayAnimation();
-    startMemoryMonitoring();
-  } else {
-    console.warn("No tray animation frames found (pen1..pen5).");
-  }
+  // IPCハンドラ登録を先に行うため、ウィンドウ作成は後段に移動
 
   // グローバルホットキーの登録
   // Command+M でメインウィンドウの表示/非表示を切り替え
@@ -768,7 +757,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(
     "analyze-windows",
-    async (_, userIntent: string): Promise<WindowAction[]> => {
+    async (_, userIntent: string): Promise<any> => {
       console.log("Analyzing windows with intent:", userIntent);
       const currentState = await windowManager.getWindowState();
       console.log(`Found ${currentState.windows.length} windows`);
@@ -781,7 +770,8 @@ app.whenReady().then(async () => {
       console.log("AI Response:", response);
       console.log("Actions to execute:", response.actions);
 
-      return response.actions;
+      // レンダラー側は { actions, appsToClose?, explanation? } を期待
+      return response;
     }
   );
 
@@ -802,6 +792,82 @@ app.whenReady().then(async () => {
       return result;
     }
   );
+
+  // AI最適化分析のIPCハンドラー
+  ipcMain.handle("get-ai-optimization", async () => {
+    console.log("🤖 Getting AI optimization recommendations...");
+
+    if (!analysisService || !focusLogger || !windowManager) {
+      console.log("⚠️ Analysis services not ready");
+      return null;
+    }
+
+    try {
+      // 1. フォーカス統計を取得
+      const focusStats = await focusLogger.getAllStats();
+      const validFocusStats = focusStats.filter(
+        (stat: any) =>
+          stat.appName !== null &&
+          stat.appName !== "" &&
+          stat.totalFocusTime > 0
+      );
+
+      // 2. CPU情報を取得
+      const cpuInfo = await windowManager.getCpuInfo();
+      const processes = cpuInfo.processes || [];
+
+      // 3. 現在のアプリ一覧を取得
+      const windowState = await windowManager.getWindowState();
+      const currentApps = [
+        ...new Set(windowState.windows.map((w) => w.appName)),
+      ];
+
+      // 4. フォーカス分析
+      const focusAnalysis = await analysisService.analyzeFocusPatterns(
+        validFocusStats
+      );
+
+      // 5. リソース分析
+      const resourceAnalysis = await analysisService.analyzeResourceUsage(
+        processes
+      );
+
+      // 6. 統合分析で閉じるべきアプリを特定
+      const recommendations =
+        await analysisService.getIntegratedRecommendations(
+          focusAnalysis,
+          resourceAnalysis,
+          currentApps
+        );
+
+      // appsToCloseが配列であることを確認
+      const appsToClose = Array.isArray(recommendations.appsToClose)
+        ? recommendations.appsToClose
+        : [];
+
+      console.log(
+        `✅ AI optimization analysis complete: ${appsToClose.length} apps recommended to close`
+      );
+
+      return {
+        ...recommendations,
+        appsToClose: appsToClose,
+      };
+    } catch (error) {
+      console.error("❌ AI optimization analysis error:", error);
+      return null;
+    }
+  });
+
+  // アプリを終了するIPCハンドラー
+  ipcMain.handle("quit-app", async (_, appName: string): Promise<boolean> => {
+    try {
+      return await windowManager.quitApp(appName);
+    } catch (error) {
+      console.error(`Error quitting app ${appName}:`, error);
+      return false;
+    }
+  });
 
   ipcMain.handle(
     "execute-actions",
@@ -844,10 +910,7 @@ app.whenReady().then(async () => {
     }
   );
 
-  ipcMain.handle("quit-app", async (_, appName: string): Promise<boolean> => {
-    console.log(`Quit app request: ${appName}`);
-    return await windowManager.quitApp(appName);
-  });
+  // 重複登録を避けるため、'quit-app' のハンドラは1箇所に統一
 
   ipcMain.handle(
     "get-cpu-info",
@@ -1223,6 +1286,19 @@ app.whenReady().then(async () => {
       return false;
     }
   });
+
+  // メインウィンドウとトレイを作成（IPC登録後に実行）
+  createWindow(needsOnboarding);
+  createTray();
+
+  // トレイアニメーションのプリロードと開始
+  trayAnimFrames = loadTrayAnimFrames();
+  if (trayAnimFrames.length > 0) {
+    startTrayAnimation();
+    startMemoryMonitoring();
+  } else {
+    console.warn("No tray animation frames found (pen1..pen5).");
+  }
 });
 
 app.on("window-all-closed", () => {
