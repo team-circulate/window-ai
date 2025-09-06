@@ -75,8 +75,6 @@ app.whenReady().then(async () => {
     return;
   }
 
-  windowManager = new WindowManager();
-  
   // APIキーを確認
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -85,6 +83,7 @@ app.whenReady().then(async () => {
   }
   
   claudeService = new ClaudeService(apiKey || "");
+  windowManager = new WindowManager(claudeService);
 
   createWindow();
 
@@ -181,6 +180,14 @@ app.whenReady().then(async () => {
     async (_, appName: string): Promise<boolean> => {
       console.log(`Quit app request: ${appName}`);
       return await windowManager.quitApp(appName);
+    }
+  );
+
+  ipcMain.handle(
+    "get-cpu-info",
+    async (): Promise<import("./types").CpuInfo> => {
+      console.log("Getting CPU info");
+      return await windowManager.getCpuInfo();
     }
   );
 });

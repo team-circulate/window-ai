@@ -4,10 +4,17 @@ let iconCache = {} // アイコンのキャッシュ
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   refreshWindowList()
+  refreshCpuInfo()
   
   // Event listeners
   document.getElementById('analyzeBtn').addEventListener('click', analyzeAndExecute)
   document.getElementById('refreshBtn').addEventListener('click', refreshWindowList)
+  document.getElementById('cpuRefreshBtn').addEventListener('click', refreshCpuInfo)
+  
+  // Auto-refresh CPU info every 5 seconds
+  setInterval(() => {
+    refreshCpuInfo()
+  }, 5000)
   
   // Quick action buttons
   document.querySelectorAll('.quick-action').forEach(btn => {
@@ -33,9 +40,26 @@ async function refreshWindowList() {
     currentWindows = windowState.windows
     
     displayWindows(windowState.windows)
+    
+    // CPU情報も一緒に表示
+    if (windowState.cpuInfo) {
+      displayCpuInfo(windowState.cpuInfo)
+    }
+    
     addLog(`${windowState.windows.length}個のウィンドウを検出`, 'success')
   } catch (error) {
     addLog(`エラー: ${error.message}`, 'error')
+  }
+}
+
+async function refreshCpuInfo() {
+  try {
+    addLog('CPU情報を取得中...', 'info')
+    const cpuInfo = await window.windowAPI.getCpuInfo()
+    displayCpuInfo(cpuInfo)
+    addLog('CPU情報を更新しました', 'success')
+  } catch (error) {
+    addLog(`CPU情報取得エラー: ${error.message}`, 'error')
   }
 }
 
@@ -75,16 +99,31 @@ function displayWindows(windows) {
       <button class="mini-btn quit-btn" onclick="quitApp('${window.appName}')" title="アプリを終了">終了</button>
     `
     
+    // リソース使用量の表示
+    const resourceUsage = (window.cpuUsage !== undefined && window.memoryUsage !== undefined) ? `
+      <div class="window-resource-usage">
+        <span class="resource-cpu" style="color: ${window.cpuUsage > 10 ? '#ff6b6b' : window.cpuUsage > 5 ? '#fbbf24' : '#4ade80'}">
+          CPU: ${window.cpuUsage.toFixed(1)}%
+        </span>
+        <span class="resource-memory" style="color: ${window.memoryUsage > 500 ? '#ff6b6b' : window.memoryUsage > 200 ? '#fbbf24' : '#60a5fa'}">
+          RAM: ${window.memoryUsage.toFixed(0)}MB
+        </span>
+      </div>
+    ` : '';
+    
     return `
     <div class="window-item">
       <div class="window-info">
         ${iconHtml}
-        <div>
-          <strong>${window.appName}</strong>
-          <br>
-          <small>${window.title || 'Untitled'}</small>
-          ${window.isMinimized ? '<span class="state-badge">最小化</span>' : ''}
-          ${window.isMaximized ? '<span class="state-badge">最大化</span>' : ''}
+        <div class="window-details">
+          <div class="window-main-info">
+            <strong>${window.appName}</strong>
+            <br>
+            <small>${window.title || 'Untitled'}</small>
+            ${window.isMinimized ? '<span class="state-badge">最小化</span>' : ''}
+            ${window.isMaximized ? '<span class="state-badge">最大化</span>' : ''}
+          </div>
+          ${resourceUsage}
         </div>
       </div>
       <div class="window-actions">
@@ -282,6 +321,56 @@ async function quitApp(appName) {
   } catch (error) {
     addLog(`アプリ終了エラー: ${error.message}`, 'error')
   }
+}
+
+function displayCpuInfo(cpuInfo) {
+  const cpuInfoContainer = document.getElementById('cpuInfo')
+  
+  if (!cpuInfoContainer) {
+    console.warn('CPU info container not found')
+    return
+  }
+  
+  const usageColor = cpuInfo.usage > 80 ? '#ff4444' : cpuInfo.usage > 50 ? '#ffaa44' : '#44ff44'
+  
+  const processesHtml = cpuInfo.processes.length > 0 
+    ? cpuInfo.processes.map((proc, index) => {
+        const cpuColor = proc.cpuUsage > 10 ? '#ff6b6b' : proc.cpuUsage > 5 ? '#fbbf24' : proc.cpuUsage > 0 ? '#4ade80' : '#9ca3af';
+        const memColor = proc.memoryUsage > 100 ? '#ff6b6b' : proc.memoryUsage > 50 ? '#fbbf24' : '#60a5fa';
+        
+        return `
+        <div class="process-item">
+          <div class="process-main">
+            <span class="process-name">${proc.name}</span>
+            <span class="process-stats">
+              <span class="process-cpu" style="color: ${cpuColor}">${proc.cpuUsage.toFixed(1)}%</span>
+              <span class="process-memory" style="color: ${memColor}">${proc.memoryUsage.toFixed(1)}MB</span>
+            </span>
+          </div>
+          ${proc.description ? `<div class="process-description">${proc.description}</div>` : ''}
+        </div>
+      `}).join('')
+    : '<div class="process-item">プロセス情報なし</div>'
+  
+  cpuInfoContainer.innerHTML = `
+    <div class="cpu-overview">
+      <div class="cpu-stat">
+        <div class="cpu-label">CPU使用率</div>
+        <div class="cpu-value" style="color: ${usageColor}">${cpuInfo.usage.toFixed(1)}%</div>
+      </div>
+      <div class="cpu-stat">
+        <div class="cpu-label">コア数</div>
+        <div class="cpu-value">${cpuInfo.cores}</div>
+      </div>
+    </div>
+    <div class="cpu-model">
+      <small>${cpuInfo.model}</small>
+    </div>
+    <div class="cpu-processes">
+      <div class="processes-header">上位プロセス</div>
+      ${processesHtml}
+    </div>
+  `
 }
 
 function addLog(message, type = 'info') {
