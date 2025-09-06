@@ -11,16 +11,22 @@ import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./windowManager";
 import { ClaudeService } from "./claudeService";
+import { NotificationService, NotificationData, NotificationLog } from "./notificationService";
 import { WindowState, WindowAction } from "./types";
 
 let mainWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
+let notificationService: NotificationService;
 
 async function createWindow() {
+  // アプリ名を設定（通知に使用される）
+  app.setName("Window AI Manager");
+  
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    title: "Window AI Manager",
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -85,6 +91,22 @@ app.whenReady().then(async () => {
   }
   
   claudeService = new ClaudeService(apiKey || "");
+  notificationService = new NotificationService(claudeService);
+
+  // 通知権限を初期化時にチェック
+  if (process.platform === 'darwin') {
+    try {
+      console.log('📱 Initializing notification permissions...');
+      const hasPermission = await notificationService.checkNotificationPermission();
+      if (hasPermission) {
+        console.log('✅ Notification permissions granted');
+      } else {
+        console.log('❌ Notification permissions denied');
+      }
+    } catch (error) {
+      console.error('❗ Error initializing notification permission:', error);
+    }
+  }
 
   createWindow();
 
@@ -181,6 +203,37 @@ app.whenReady().then(async () => {
     async (_, appName: string): Promise<boolean> => {
       console.log(`Quit app request: ${appName}`);
       return await windowManager.quitApp(appName);
+    }
+  );
+
+  // 通知関連のIPCハンドラー
+  ipcMain.handle(
+    "send-notification",
+    async (_, notificationData: NotificationData): Promise<boolean> => {
+      console.log("Sending notification:", notificationData.title);
+      return await notificationService.sendNotification(notificationData);
+    }
+  );
+
+  ipcMain.handle(
+    "send-test-notification",
+    async (): Promise<boolean> => {
+      console.log("Sending test notification");
+      return await notificationService.sendTestNotification();
+    }
+  );
+
+  ipcMain.handle(
+    "get-notification-logs",
+    async (_, limit?: number): Promise<NotificationLog[]> => {
+      return notificationService.getNotificationLogs(limit);
+    }
+  );
+
+  ipcMain.handle(
+    "check-notification-permission",
+    async (): Promise<boolean> => {
+      return await notificationService.checkNotificationPermission();
     }
   );
 });

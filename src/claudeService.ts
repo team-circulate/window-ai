@@ -205,6 +205,91 @@ Please analyze and provide window management actions.`;
     }
   }
 
+  /**
+   * 通知の分析を実行
+   */
+  async analyzeNotification(notificationData: {
+    title: string;
+    body: string;
+    appName?: string;
+    timestamp: number;
+  }): Promise<{
+    category: string;
+    importance: 'low' | 'medium' | 'high' | 'critical';
+    confidence: number;
+    reasoning: string;
+  }> {
+    const systemPrompt = `あなたは通知分析AIです。与えられた通知を分析して、カテゴリと重要度を判定してください。
+
+カテゴリの選択肢：
+- system: システム関連（アップデート、エラー、設定変更など）
+- communication: コミュニケーション（メール、メッセージ、通話など）
+- productivity: 生産性（タスク、リマインダー、カレンダーなど）
+- entertainment: エンターテイメント（ゲーム、音楽、動画など）
+- security: セキュリティ（ログイン、認証、警告など）
+- news: ニュース・情報（天気、ニュース、アラートなど）
+- other: その他
+
+重要度の基準：
+- critical: 即座に対応が必要（セキュリティ警告、システムエラーなど）
+- high: 重要だが緊急ではない（重要なメッセージ、タスク期限など）
+- medium: 一般的な重要度（通常の通知）
+- low: 低い重要度（マーケティング、広告など）
+
+必ず以下のJSON形式で回答してください：
+{"category":"カテゴリ","importance":"重要度","confidence":0.8,"reasoning":"判定理由"}`;
+
+    const userMessage = `通知タイトル: ${notificationData.title}
+通知内容: ${notificationData.body}
+アプリ名: ${notificationData.appName || '不明'}
+タイムスタンプ: ${new Date(notificationData.timestamp).toLocaleString()}
+
+この通知を分析してください。`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 500,
+        temperature: 0.3,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ],
+      });
+
+      const content = response.content[0];
+      if (content.type === 'text') {
+        const text = content.text;
+        
+        // JSON形式の応答を抽出
+        const jsonMatch = text.match(/\{[^{}]*"category"[^{}]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            category: parsed.category || 'other',
+            importance: parsed.importance || 'medium',
+            confidence: parsed.confidence || 0.5,
+            reasoning: parsed.reasoning || '分析完了'
+          };
+        }
+      }
+
+      // フォールバック
+      return {
+        category: 'other',
+        importance: 'medium',
+        confidence: 0.0,
+        reasoning: 'JSON形式の応答を取得できませんでした'
+      };
+    } catch (error) {
+      console.error('Claude API error in notification analysis:', error);
+      throw error;
+    }
+  }
+
   async suggestLayout(currentState: WindowState): Promise<AIResponse> {
     const suggestions = this.analyzeLayout(currentState);
 

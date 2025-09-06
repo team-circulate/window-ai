@@ -4,10 +4,13 @@ let iconCache = {} // アイコンのキャッシュ
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   refreshWindowList()
+  refreshNotificationLogs()
+  checkNotificationPermission()
   
   // Event listeners
   document.getElementById('analyzeBtn').addEventListener('click', analyzeAndExecute)
   document.getElementById('refreshBtn').addEventListener('click', refreshWindowList)
+  document.getElementById('testNotificationBtn').addEventListener('click', sendTestNotification)
   
   // Quick action buttons
   document.querySelectorAll('.quick-action').forEach(btn => {
@@ -297,5 +300,91 @@ function addLog(message, type = 'info') {
   // Keep only last 10 logs
   while (logContainer.children.length > 10) {
     logContainer.removeChild(logContainer.lastChild)
+  }
+}
+
+// 通知関連の関数
+async function refreshNotificationLogs() {
+  try {
+    const logs = await window.windowAPI.getNotificationLogs(20) // 最新20件
+    displayNotificationLogs(logs)
+  } catch (error) {
+    console.error('Error refreshing notification logs:', error)
+    addLog(`通知ログ取得エラー: ${error.message}`, 'error')
+  }
+}
+
+function displayNotificationLogs(logs) {
+  const container = document.getElementById('notificationLogContainer')
+  
+  if (logs.length === 0) {
+    container.innerHTML = '<div class="log-entry info">通知ログがありません</div>'
+    return
+  }
+  
+  container.innerHTML = logs.map(log => {
+    const notification = log.notification
+    const analysis = log.aiAnalysis
+    const timestamp = new Date(log.timestamp).toLocaleTimeString()
+    
+    // 重要度に基づくクラス
+    const importanceClass = analysis ? analysis.importance : notification.importance || 'medium'
+    
+    // AI分析の表示
+    const aiAnalysisHtml = analysis ? `
+      <div class="ai-analysis">
+        <div class="ai-analysis-label">🤖 AI分析</div>
+        <div class="ai-analysis-content">
+          カテゴリ: ${analysis.category} | 重要度: ${analysis.importance} | 信頼度: ${Math.round(analysis.confidence * 100)}%
+          <br>理由: ${analysis.reasoning}
+        </div>
+      </div>
+    ` : '<div class="ai-analysis"><div class="ai-analysis-label">🤖 AI分析中...</div></div>'
+    
+    return `
+      <div class="notification-log-entry ${importanceClass}">
+        <div class="notification-header">
+          <span class="notification-title">${notification.title}</span>
+          <span class="notification-category">${analysis ? analysis.category : notification.category || 'other'}</span>
+        </div>
+        <div class="notification-body">${notification.body}</div>
+        <div class="notification-meta">
+          <span>${notification.appName || 'Unknown App'}</span>
+          <span>${timestamp}</span>
+        </div>
+        ${aiAnalysisHtml}
+      </div>
+    `
+  }).join('')
+}
+
+async function sendTestNotification() {
+  try {
+    addLog('テスト通知を送信中...', 'info')
+    const success = await window.windowAPI.sendTestNotification()
+    
+    if (success) {
+      addLog('テスト通知を送信しました', 'success')
+      // 通知ログを更新（少し遅延を入れてAI分析が完了するのを待つ）
+      setTimeout(refreshNotificationLogs, 2000)
+    } else {
+      addLog('テスト通知の送信に失敗しました', 'error')
+    }
+  } catch (error) {
+    addLog(`テスト通知エラー: ${error.message}`, 'error')
+  }
+}
+
+// 通知権限をチェック
+async function checkNotificationPermission() {
+  try {
+    const hasPermission = await window.windowAPI.checkNotificationPermission()
+    if (!hasPermission) {
+      addLog('通知権限がありません。システム設定 > 通知 > Window AI Manager で通知を許可してください。', 'error')
+    } else {
+      addLog('通知権限が確認されました', 'success')
+    }
+  } catch (error) {
+    addLog(`通知権限チェックエラー: ${error.message}`, 'error')
   }
 }
