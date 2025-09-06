@@ -91,20 +91,37 @@ export class WindowManager {
                 const windowName = window.name();
                 const position = window.position();
                 const size = window.size();
-                
+
                 // ウィンドウの状態を取得
                 let isMinimized = false;
                 let isMaximized = false;
                 try {
-                  // miniaturizedプロパティで最小化状態を確認
-                  isMinimized = window.miniaturized && window.miniaturized() || false;
-                  
+                  // System Eventsからウィンドウの属性を取得
+                  const attributes = window.attributes();
+                  for (let attr of attributes) {
+                    const attrName = attr.name();
+                    if (attrName === "AXMinimized") {
+                      isMinimized = attr.value() || false;
+                      console.log(`Window ${windowName}: AXMinimized = ${isMinimized}`);
+                      break;
+                    }
+                  }
+
                   // ウィンドウサイズとディスプレイサイズを比較して最大化を判定
                   const screenWidth = 1920; // 後でディスプレイ情報から取得
                   const screenHeight = 1080;
-                  isMaximized = size[0] >= screenWidth * 0.95 && size[1] >= screenHeight * 0.9;
+                  isMaximized =
+                    size[0] >= screenWidth * 0.95 &&
+                    size[1] >= screenHeight * 0.9;
                 } catch (e) {
-                  // 状態取得エラーは無視
+                  // 属性取得に失敗した場合はプロパティを試す
+                  try {
+                    if (window.miniaturized) {
+                      isMinimized = window.miniaturized() || false;
+                    }
+                  } catch (minErr) {
+                    // プロパティが存在しない場合は無視
+                  }
                 }
 
                 windows.push({
@@ -121,7 +138,7 @@ export class WindowManager {
                   isMinimized: isMinimized,
                   isFocused: false,
                   isVisible: !isMinimized,
-                  isMaximized: isMaximized
+                  isMaximized: isMaximized,
                 });
               } catch (windowError) {
                 // Skip individual windows that can't be accessed
@@ -185,56 +202,75 @@ export class WindowManager {
 
   async executeAction(action: WindowAction): Promise<boolean> {
     console.log("Executing action:", action.type, action);
-    
+
     try {
       let result = false;
-      
+
       switch (action.type) {
         case "move":
-          console.log("Moving window:", action.targetWindow, "to", action.parameters?.position);
+          console.log(
+            "Moving window:",
+            action.targetWindow,
+            "to",
+            action.parameters?.position
+          );
           result = await this.moveWindow(
             action.targetWindow!,
             action.parameters!.position!
           );
           break;
-          
+
         case "resize":
-          console.log("Resizing window:", action.targetWindow, "to", action.parameters?.size);
+          console.log(
+            "Resizing window:",
+            action.targetWindow,
+            "to",
+            action.parameters?.size
+          );
           result = await this.resizeWindow(
             action.targetWindow!,
             action.parameters!.size!
           );
           break;
-          
+
         case "minimize":
           result = await this.minimizeWindow(action.targetWindow!);
           break;
-          
+
         case "maximize":
           result = await this.maximizeWindow(action.targetWindow!);
           break;
-          
+
+        case "restore":
+          result = await this.restoreWindow(action.targetWindow!);
+          break;
+
         case "focus":
           result = await this.focusWindow(action.targetWindow!);
           break;
-          
+
         case "arrange":
-          console.log("Arranging windows:", action.targetWindows, "with arrangement:", action.parameters?.arrangement);
+          console.log(
+            "Arranging windows:",
+            action.targetWindows,
+            "with arrangement:",
+            action.parameters?.arrangement
+          );
           result = await this.arrangeWindows(
             action.targetWindows || [],
-            action.parameters?.arrangement || 'tile-left'
+            action.parameters?.arrangement || "tile-left"
           );
           break;
-          
+
         case "close":
           result = await this.closeWindow(action.targetWindow!);
           break;
-          
+
         default:
           console.warn("Unknown action type:", action.type);
           result = false;
       }
-      
+
       console.log(`Action ${action.type} result:`, result);
       return result;
     } catch (error) {
@@ -249,7 +285,7 @@ export class WindowManager {
   ): Promise<boolean> {
     const separatorIndex = windowId.indexOf("-");
     if (separatorIndex === -1) return false;
-    
+
     const appName = windowId.substring(0, separatorIndex);
     const windowTitle = windowId.substring(separatorIndex + 1);
 
@@ -278,7 +314,7 @@ export class WindowManager {
   ): Promise<boolean> {
     const separatorIndex = windowId.indexOf("-");
     if (separatorIndex === -1) return false;
-    
+
     const appName = windowId.substring(0, separatorIndex);
     const windowTitle = windowId.substring(separatorIndex + 1);
 
@@ -303,50 +339,62 @@ export class WindowManager {
 
   private async minimizeWindow(windowId: string): Promise<boolean> {
     console.log(`Minimizing window with ID: ${windowId}`);
-    
+
     // windowIdは "appName-windowTitle" 形式なので、最初の"-"で分割
     const separatorIndex = windowId.indexOf("-");
     if (separatorIndex === -1) {
       console.error(`Invalid window ID format: ${windowId}`);
       return false;
     }
-    
+
     const appName = windowId.substring(0, separatorIndex);
     const windowTitle = windowId.substring(separatorIndex + 1);
-    
+
     console.log(`App: ${appName}, Window: ${windowTitle}`);
 
     try {
-      const result = await run<{ success: boolean; debug?: any[]; message?: string; error?: string }>(
+      const result = await run<{
+        success: boolean;
+        debug?: any[];
+        message?: string;
+        error?: string;
+      }>(
         (appName, windowTitle) => {
           try {
             const se = Application("System Events");
-            
+
             // アプリケーションをアクティブにする
             const app = Application(appName);
             app.activate();
-            
+
             // System Eventsでウィンドウを操作
             const process = se.processes[appName];
             const windows = process.windows();
-            
+
             // デバッグ情報を返す
             const debugInfo: any[] = [];
-            
+
             for (let i = 0; i < windows.length; i++) {
               const win = windows[i];
               const winName = win.name();
               debugInfo.push(`Window ${i}: ${winName}`);
-              
-              if (winName === windowTitle || 
-                  windowTitle.includes("window-") && i.toString() === windowTitle.split("-").pop()) {
+
+              if (
+                winName === windowTitle ||
+                (windowTitle.includes("window-") &&
+                  i.toString() === windowTitle.split("-").pop())
+              ) {
                 // ウィンドウを最小化
                 se.click(win.buttons.whose({ subrole: "AXMinimizeButton" })[0]);
                 return { success: true, debug: debugInfo };
               }
             }
-            
-            return { success: false, debug: debugInfo, message: "Window not found" };
+
+            return {
+              success: false,
+              debug: debugInfo,
+              message: "Window not found",
+            };
           } catch (error) {
             return { success: false, error: String(error) };
           }
@@ -354,7 +402,7 @@ export class WindowManager {
         appName,
         windowTitle
       );
-      
+
       console.log("Minimize result:", result);
       return result.success || false;
     } catch (error) {
@@ -365,10 +413,10 @@ export class WindowManager {
 
   private async maximizeWindow(windowId: string): Promise<boolean> {
     console.log(`Maximizing window with ID: ${windowId}`);
-    
+
     const separatorIndex = windowId.indexOf("-");
     if (separatorIndex === -1) return false;
-    
+
     const appName = windowId.substring(0, separatorIndex);
     const windowTitle = windowId.substring(separatorIndex + 1);
 
@@ -377,21 +425,24 @@ export class WindowManager {
         (appName, windowTitle) => {
           try {
             const se = Application("System Events");
-            
+
             // アプリケーションをアクティブにする
             const app = Application(appName);
             app.activate();
-            
+
             // System Eventsでウィンドウを操作
             const process = se.processes[appName];
             const windows = process.windows();
-            
+
             for (let i = 0; i < windows.length; i++) {
               const win = windows[i];
               const winName = win.name();
-              
-              if (winName === windowTitle || 
-                  (windowTitle.includes("window-") && i.toString() === windowTitle.split("-").pop())) {
+
+              if (
+                winName === windowTitle ||
+                (windowTitle.includes("window-") &&
+                  i.toString() === windowTitle.split("-").pop())
+              ) {
                 // 最大化ボタンをクリック（緑色のボタン）
                 const buttons = win.buttons();
                 for (let j = 0; j < buttons.length; j++) {
@@ -401,14 +452,14 @@ export class WindowManager {
                     return { success: true };
                   }
                 }
-                
+
                 // フォールバック: サイズを手動で設定
                 win.position = [0, 23]; // メニューバーの高さを考慮
                 win.size = [1920, 1057]; // デフォルトサイズ
                 return { success: true, message: "Manual resize" };
               }
             }
-            
+
             return { success: false, message: "Window not found" };
           } catch (error) {
             return { success: false, message: String(error) };
@@ -417,7 +468,7 @@ export class WindowManager {
         appName,
         windowTitle
       );
-      
+
       console.log("Maximize result:", result);
       return result.success;
     } catch (error) {
@@ -428,24 +479,28 @@ export class WindowManager {
 
   private async restoreWindow(windowId: string): Promise<boolean> {
     console.log(`Restoring window with ID: ${windowId}`);
-    
+
     const separatorIndex = windowId.indexOf("-");
-    if (separatorIndex === -1) return false;
-    
+    if (separatorIndex === -1) {
+      console.error(`Invalid window ID format: ${windowId}`);
+      return false;
+    }
+
     const appName = windowId.substring(0, separatorIndex);
     const windowTitle = windowId.substring(separatorIndex + 1);
+    console.log(`Restoring window: app=${appName}, title=${windowTitle}`);
 
     try {
       const result = await run<{ success: boolean; message?: string }>(
         (appName, windowTitle) => {
           try {
             const se = Application("System Events");
-            
-            // アプリケーションをアクティブにする
             const app = Application(appName);
+            
+            // まずアプリをアクティブにする
             app.activate();
             
-            // System Eventsでウィンドウを操作
+            // System Eventsでウィンドウを取得
             const process = se.processes[appName];
             const windows = process.windows();
             
@@ -453,37 +508,70 @@ export class WindowManager {
               const win = windows[i];
               const winName = win.name();
               
-              if (winName === windowTitle || 
-                  (windowTitle.includes("window-") && i.toString() === windowTitle.split("-").pop())) {
-                
-                // 最小化されている場合は復元
-                if (win.miniaturized && win.miniaturized()) {
-                  win.miniaturized = false;
-                  return { success: true, message: "Restored from minimize" };
+              if (
+                winName === windowTitle ||
+                (windowTitle.includes("window-") &&
+                  i.toString() === windowTitle.split("-").pop())
+              ) {
+                // AXMinimized属性を直接チェック
+                let isMinimized = false;
+                try {
+                  const attributes = win.attributes();
+                  for (let j = 0; j < attributes.length; j++) {
+                    const attr = attributes[j];
+                    if (attr.name() === "AXMinimized") {
+                      isMinimized = attr.value();
+                      break;
+                    }
+                  }
+                } catch (attrErr) {
+                  // エラー時はサイレントに
                 }
                 
-                // 最大化されている場合は元のサイズに戻す
+                if (isMinimized) {
+                  // 最小化されたウィンドウを即座に復元
+                  try {
+                    // AXMinimized属性を直接falseに設定
+                    const attributes = win.attributes();
+                    for (let j = 0; j < attributes.length; j++) {
+                      const attr = attributes[j];
+                      if (attr.name() === "AXMinimized") {
+                        // 即座に復元
+                        attr.value = false;
+                        // アプリをアクティブに
+                        app.activate();
+                        return { success: true, message: "Restored" };
+                      }
+                    }
+                  } catch (restoreErr) {
+                    // エラー時はサイレントに処理
+                  }
+                }
+                
+                // 最大化されている場合の処理
                 const currentSize = win.size();
                 if (currentSize[0] >= 1900 && currentSize[1] >= 1000) {
-                  // デフォルトのウィンドウサイズに戻す
                   win.position = [100, 100];
                   win.size = [1200, 800];
                   return { success: true, message: "Restored from maximize" };
                 }
                 
-                return { success: true, message: "Already in normal state" };
+                // すでに通常状態
+                app.activate();
+                return { success: true, message: "Window activated" };
               }
             }
             
             return { success: false, message: "Window not found" };
           } catch (error) {
+            console.log(`Error in restore: ${error}`);
             return { success: false, message: String(error) };
           }
         },
         appName,
         windowTitle
       );
-      
+
       console.log("Restore result:", result);
       return result.success;
     } catch (error) {
@@ -495,7 +583,7 @@ export class WindowManager {
   private async focusWindow(windowId: string): Promise<boolean> {
     const separatorIndex = windowId.indexOf("-");
     if (separatorIndex === -1) return false;
-    
+
     const appName = windowId.substring(0, separatorIndex);
     const windowTitle = windowId.substring(separatorIndex + 1);
 
@@ -503,12 +591,59 @@ export class WindowManager {
       (appName, windowTitle) => {
         try {
           const se = Application("System Events");
+          const app = Application(appName);
+          
+          // まずアプリをアクティブにする
+          app.activate();
+          
+          // System Eventsでウィンドウを取得
           const process = se.processes[appName];
-          process.frontmost = true;
-
-          const window = process.windows.whose({ name: windowTitle })[0];
-          se.click(window.buttons[0]); // Click to focus
-          return true;
+          const windows = process.windows();
+          
+          for (let i = 0; i < windows.length; i++) {
+            const win = windows[i];
+            const winName = win.name();
+            
+            if (
+              winName === windowTitle ||
+              (windowTitle.includes("window-") &&
+                i.toString() === windowTitle.split("-").pop())
+            ) {
+              // ウィンドウが最小化されているか確認
+              let isMinimized = false;
+              try {
+                const attributes = win.attributes();
+                for (let j = 0; j < attributes.length; j++) {
+                  const attr = attributes[j];
+                  if (attr.name() === "AXMinimized") {
+                    isMinimized = attr.value();
+                    if (isMinimized) {
+                      // 最小化されている場合は復元
+                      attr.value = false;
+                    }
+                    break;
+                  }
+                }
+              } catch (attrErr) {
+                // エラー時はサイレントに処理
+              }
+              
+              // アプリを前面に
+              process.frontmost = true;
+              
+              // ウィンドウをアクティブにする（ボタンをクリックせずに）
+              try {
+                // AXRaise アクションを実行してウィンドウを前面に
+                win.actions.whose({ name: "AXRaise" })[0].perform();
+              } catch (raiseErr) {
+                // AXRaiseが使えない場合は、アプリのアクティブ化のみ
+              }
+              
+              return true;
+            }
+          }
+          
+          return false;
         } catch {
           return false;
         }
@@ -522,14 +657,16 @@ export class WindowManager {
     windowIds: string[],
     arrangement: string
   ): Promise<boolean> {
-    console.log(`Arranging ${windowIds.length} windows with arrangement: ${arrangement}`);
+    console.log(
+      `Arranging ${windowIds.length} windows with arrangement: ${arrangement}`
+    );
     console.log("Window IDs:", windowIds);
-    
+
     if (!windowIds || windowIds.length === 0) {
       console.error("No windows to arrange");
       return false;
     }
-    
+
     const state = await this.getWindowState();
     const primaryDisplay =
       state.displays.find((d) => d.isPrimary) || state.displays[0];
@@ -541,11 +678,11 @@ export class WindowManager {
 
     const { width, height } = primaryDisplay.bounds;
     console.log(`Display size: ${width}x${height}`);
-    
+
     // メニューバーの高さを考慮
     const menuBarHeight = 23;
     const adjustedHeight = height - menuBarHeight;
-    
+
     try {
       switch (arrangement) {
         case "tile-left":
@@ -554,12 +691,17 @@ export class WindowManager {
           // Split screen left/right
           for (let i = 0; i < windowIds.length && i < 2; i++) {
             const x = i === 0 ? 0 : width / 2;
-            const moveResult = await this.moveWindow(windowIds[i], { x, y: menuBarHeight });
-            const resizeResult = await this.resizeWindow(windowIds[i], { 
-              width: width / 2, 
-              height: adjustedHeight 
+            const moveResult = await this.moveWindow(windowIds[i], {
+              x,
+              y: menuBarHeight,
             });
-            console.log(`Window ${i}: move=${moveResult}, resize=${resizeResult}`);
+            const resizeResult = await this.resizeWindow(windowIds[i], {
+              width: width / 2,
+              height: adjustedHeight,
+            });
+            console.log(
+              `Window ${i}: move=${moveResult}, resize=${resizeResult}`
+            );
           }
           break;
 
@@ -574,13 +716,15 @@ export class WindowManager {
             const col = i % 2;
             const x = col * gridWidth;
             const y = row * gridHeight + menuBarHeight;
-            
+
             const moveResult = await this.moveWindow(windowIds[i], { x, y });
             const resizeResult = await this.resizeWindow(windowIds[i], {
               width: gridWidth,
               height: gridHeight,
             });
-            console.log(`Window ${i} (row=${row}, col=${col}): move=${moveResult}, resize=${resizeResult}`);
+            console.log(
+              `Window ${i} (row=${row}, col=${col}): move=${moveResult}, resize=${resizeResult}`
+            );
           }
           break;
 
@@ -591,13 +735,15 @@ export class WindowManager {
           for (let i = 0; i < windowIds.length; i++) {
             const x = i * offset + 50;
             const y = i * offset + 50;
-            
+
             const moveResult = await this.moveWindow(windowIds[i], { x, y });
             const resizeResult = await this.resizeWindow(windowIds[i], {
               width: width * 0.6,
               height: adjustedHeight * 0.6,
             });
-            console.log(`Window ${i}: move=${moveResult}, resize=${resizeResult}`);
+            console.log(
+              `Window ${i}: move=${moveResult}, resize=${resizeResult}`
+            );
           }
           break;
 
@@ -615,15 +761,17 @@ export class WindowManager {
               width: centerWidth,
               height: centerHeight,
             });
-            console.log(`Center window: move=${moveResult}, resize=${resizeResult}`);
+            console.log(
+              `Center window: move=${moveResult}, resize=${resizeResult}`
+            );
           }
           break;
-          
+
         default:
           console.warn(`Unknown arrangement: ${arrangement}`);
           return false;
       }
-      
+
       console.log("Arrange completed successfully");
       return true;
     } catch (error) {
@@ -634,10 +782,10 @@ export class WindowManager {
 
   private async closeWindow(windowId: string): Promise<boolean> {
     console.log(`Closing window with ID: ${windowId}`);
-    
+
     const separatorIndex = windowId.indexOf("-");
     if (separatorIndex === -1) return false;
-    
+
     const appName = windowId.substring(0, separatorIndex);
     const windowTitle = windowId.substring(separatorIndex + 1);
 
@@ -648,13 +796,16 @@ export class WindowManager {
             const se = Application("System Events");
             const process = se.processes[appName];
             const windows = process.windows();
-            
+
             for (let i = 0; i < windows.length; i++) {
               const win = windows[i];
               const winName = win.name();
-              
-              if (winName === windowTitle || 
-                  (windowTitle.includes("window-") && i.toString() === windowTitle.split("-").pop())) {
+
+              if (
+                winName === windowTitle ||
+                (windowTitle.includes("window-") &&
+                  i.toString() === windowTitle.split("-").pop())
+              ) {
                 // 閉じるボタンをクリック
                 const buttons = win.buttons();
                 for (let j = 0; j < buttons.length; j++) {
@@ -664,13 +815,13 @@ export class WindowManager {
                     return true;
                   }
                 }
-                
+
                 // フォールバック: Command+W を送信
                 se.keystroke("w", { using: "command down" });
                 return true;
               }
             }
-            
+
             return false;
           } catch {
             return false;
@@ -679,7 +830,7 @@ export class WindowManager {
         appName,
         windowTitle
       );
-      
+
       console.log("Close window result:", result);
       return result;
     } catch (error) {
@@ -687,32 +838,29 @@ export class WindowManager {
       return false;
     }
   }
-  
+
   async quitApp(appName: string): Promise<boolean> {
     console.log(`Quitting app: ${appName}`);
-    
+
     try {
-      const result = await run<boolean>(
-        (appName) => {
+      const result = await run<boolean>((appName) => {
+        try {
+          const app = Application(appName);
+          app.quit();
+          return true;
+        } catch {
+          // フォールバック: System Events を使用
           try {
-            const app = Application(appName);
-            app.quit();
+            const se = Application("System Events");
+            const process = se.processes[appName];
+            se.keystroke("q", { using: "command down" });
             return true;
           } catch {
-            // フォールバック: System Events を使用
-            try {
-              const se = Application("System Events");
-              const process = se.processes[appName];
-              se.keystroke("q", { using: "command down" });
-              return true;
-            } catch {
-              return false;
-            }
+            return false;
           }
-        },
-        appName
-      );
-      
+        }
+      }, appName);
+
       console.log("Quit app result:", result);
       return result;
     } catch (error) {
