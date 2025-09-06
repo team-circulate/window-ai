@@ -35,6 +35,19 @@ export interface CpuInfo {
   processes: ProcessInfo[] // 上位プロセスの使用率
 }
 
+export type MemoryPressureLevel = 'normal' | 'warning' | 'critical'
+
+export interface MemoryInfo {
+  totalMB: number
+  usedMB: number
+  freeMB: number
+  usedPercent: number // 0-100
+  pressure: MemoryPressureLevel
+  swapUsedMB?: number
+  source: 'memory_pressure' | 'vm_stat' | 'node'
+  timestamp: number
+}
+
 export interface ProcessInfo {
   pid: number
   name: string
@@ -54,6 +67,8 @@ export interface WindowState {
   displays: Display[]
   activeApp: string
   cpuInfo?: CpuInfo
+  // 将来的に利用するための拡張（現状は未使用）
+  // memoryInfo?: MemoryInfo
   timestamp: number
 }
 
