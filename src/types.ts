@@ -35,6 +35,19 @@ export interface CpuInfo {
   processes: ProcessInfo[] // 上位プロセスの使用率
 }
 
+export type MemoryPressureLevel = 'normal' | 'warning' | 'critical'
+
+export interface MemoryInfo {
+  totalMB: number
+  usedMB: number
+  freeMB: number
+  usedPercent: number // 0-100
+  pressure: MemoryPressureLevel
+  swapUsedMB?: number
+  source: 'memory_pressure' | 'vm_stat' | 'node'
+  timestamp: number
+}
+
 export interface ProcessInfo {
   pid: number
   name: string
@@ -54,6 +67,8 @@ export interface WindowState {
   displays: Display[]
   activeApp: string
   cpuInfo?: CpuInfo
+  // 将来的に利用するための拡張（現状は未使用）
+  // memoryInfo?: MemoryInfo
   timestamp: number
 }
 
@@ -83,4 +98,31 @@ export interface AIResponse {
   actions: WindowAction[]
   explanation: string
   confidence: number
+}
+
+// フォーカスログ関連の型定義
+export interface FocusSession {
+  appName: string;            // "Safari", "Chrome" (正式名称)
+  startTime: number;          // 開始時間 (UNIX timestamp)
+  endTime: number;            // 終了時間 (UNIX timestamp)
+  duration: number;           // 実際のフォーカス時間(秒)
+  date: string;              // "2025-01-01" 日付別分析用
+}
+
+export interface AppStats {
+  appName: string;
+  totalSessions: number;      // 総セッション数
+  totalFocusTime: number;     // 総フォーカス時間(秒)
+  averageSessionTime: number; // 平均セッション時間
+  lastUsed: number;          // 最後の使用時間
+  openWindows: number;       // 現在開いているウィンドウ数
+  cpuUsage: number;          // CPU使用率
+  memoryUsage: number;       // メモリ使用量
+}
+
+export interface TimingConfig {
+  focusMonitoring: number;    // フォーカス監視間隔
+  dataSaving: number;         // データ保存間隔
+  analysis: number;           // AI分析間隔
+  testMode: boolean;          // テストモード
 }

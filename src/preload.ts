@@ -23,10 +23,12 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("get-app-icon", appName);
   },
 
-  getAppIconsBatch: (appNames: string[]): Promise<Record<string, string | null>> => {
+  getAppIconsBatch: (
+    appNames: string[]
+  ): Promise<Record<string, string | null>> => {
     return ipcRenderer.invoke("get-app-icons-batch", appNames);
   },
-  
+
   quitApp: (appName: string): Promise<boolean> => {
     return ipcRenderer.invoke("quit-app", appName);
   },
@@ -35,6 +37,7 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("get-cpu-info");
   },
 
+  // App scanner APIs
   getAppInfo: (appName: string): Promise<string[] | null> => {
     return ipcRenderer.invoke("get-app-info", appName);
   },
@@ -55,7 +58,9 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("launch-app-by-path", appPath);
   },
 
-  analyzeApps: (appNames: string[]): Promise<Array<{name: string, observations: string[]}>> => {
+  analyzeApps: (
+    appNames: string[]
+  ): Promise<Array<{ name: string; observations: string[] }>> => {
     return ipcRenderer.invoke("analyze-apps", appNames);
   },
 
@@ -67,7 +72,7 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("check-onboarding");
   },
 
-  checkNewApps: (): Promise<{newAppsFound: boolean, apps: string[]}> => {
+  checkNewApps: (): Promise<{ newAppsFound: boolean; apps: string[] }> => {
     return ipcRenderer.invoke("check-new-apps");
   },
 
@@ -92,12 +97,18 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("delete-preset", presetId);
   },
 
-  updatePreset: (presetId: string, name?: string, description?: string): Promise<any> => {
+  updatePreset: (
+    presetId: string,
+    name?: string,
+    description?: string
+  ): Promise<any> => {
     return ipcRenderer.invoke("update-preset", presetId, name, description);
   },
 
   // Task-based app suggestions
-  suggestAppsForTask: (userPrompt: string): Promise<{
+  suggestAppsForTask: (
+    userPrompt: string
+  ): Promise<{
     highConfidence: string[];
     lowConfidence: string[];
     reasoning: string;
@@ -107,6 +118,73 @@ contextBridge.exposeInMainWorld("windowAPI", {
 
   openAppsForTask: (appNames: string[], taskName: string): Promise<any> => {
     return ipcRenderer.invoke("open-apps-for-task", appNames, taskName);
+  },
+
+  // Window and app management
+  hideWindow: (): Promise<void> => {
+    return ipcRenderer.invoke("hide-window");
+  },
+
+  focusApp: (appName: string): Promise<boolean> => {
+    return ipcRenderer.invoke("focus-app", appName);
+  },
+
+  // App mode control
+  appModeStart: (): Promise<void> => {
+    return ipcRenderer.invoke("app-mode-start");
+  },
+  appModeEnd: (): Promise<void> => {
+    return ipcRenderer.invoke("app-mode-end");
+  },
+
+  // Memory information
+  getMemoryInfo: (): Promise<import("./types").MemoryInfo> => {
+    return ipcRenderer.invoke("get-memory-info");
+  },
+
+  // Focus statistics
+  getFocusStats: (): Promise<any> => {
+    return ipcRenderer.invoke("get-focus-stats");
+  },
+
+  getDataInfo: (): Promise<any> => {
+    return ipcRenderer.invoke("get-data-info");
+  },
+
+  // Notification system
+  getNotifications: (): Promise<any[]> => {
+    return ipcRenderer.invoke("get-notifications");
+  },
+
+  markNotificationRead: (notificationId: string): Promise<boolean> => {
+    return ipcRenderer.invoke("mark-notification-read", notificationId);
+  },
+
+  getNotificationSettings: (): Promise<any> => {
+    return ipcRenderer.invoke("get-notification-settings");
+  },
+
+  saveNotificationSettings: (settings: any): Promise<boolean> => {
+    return ipcRenderer.invoke("save-notification-settings", settings);
+  },
+
+  getNotificationStats: (): Promise<any> => {
+    return ipcRenderer.invoke("get-notification-stats");
+  },
+
+  quitRecommendedApp: (appName: string): Promise<boolean> => {
+    return ipcRenderer.invoke("quit-recommended-app", appName);
+  },
+
+  // Real-time event listeners
+  onActiveAppChanged: (callback: (appName: string) => void) => {
+    ipcRenderer.on("active-app-changed", (_, appName) => callback(appName));
+  },
+
+  onNewAnalysisNotification: (callback: (notification: any) => void) => {
+    ipcRenderer.on("new-analysis-notification", (_, notification) =>
+      callback(notification)
+    );
   },
 });
 
@@ -118,30 +196,73 @@ declare global {
       executeAction: (action: WindowAction) => Promise<boolean>;
       executeActions: (actions: WindowAction[]) => Promise<boolean[]>;
       getAppIcon: (appName: string) => Promise<string | null>;
-      getAppIconsBatch: (appNames: string[]) => Promise<Record<string, string | null>>;
+      getAppIconsBatch: (
+        appNames: string[]
+      ) => Promise<Record<string, string | null>>;
       quitApp: (appName: string) => Promise<boolean>;
       getCpuInfo: () => Promise<CpuInfo>;
+
+      // App scanner APIs
       getAppInfo: (appName: string) => Promise<string[] | null>;
       getInstalledApps: () => Promise<InstalledApp[]>;
       searchApps: (query: string) => Promise<InstalledApp[]>;
       launchApp: (appName: string) => Promise<boolean>;
       launchAppByPath: (appPath: string) => Promise<boolean>;
-      analyzeApps: (appNames: string[]) => Promise<Array<{name: string, observations: string[]}>>;
+      analyzeApps: (
+        appNames: string[]
+      ) => Promise<Array<{ name: string; observations: string[] }>>;
       completeOnboarding: (analyzedApps: string[]) => Promise<boolean>;
       checkOnboarding: () => Promise<boolean>;
-      checkNewApps: () => Promise<{newAppsFound: boolean, apps: string[]}>;
+      checkNewApps: () => Promise<{ newAppsFound: boolean; apps: string[] }>;
       resetLocalData: () => Promise<boolean>;
+
+      // Preset management
       savePreset: (name: string, description?: string) => Promise<any>;
       getPresets: () => Promise<any[]>;
       loadPreset: (presetId: string) => Promise<boolean>;
       deletePreset: (presetId: string) => Promise<boolean>;
-      updatePreset: (presetId: string, name?: string, description?: string) => Promise<any>;
+      updatePreset: (
+        presetId: string,
+        name?: string,
+        description?: string
+      ) => Promise<any>;
+
+      // Task-based app suggestions
       suggestAppsForTask: (userPrompt: string) => Promise<{
         highConfidence: string[];
         lowConfidence: string[];
         reasoning: string;
       }>;
       openAppsForTask: (appNames: string[], taskName: string) => Promise<any>;
+
+      // Window and app management
+      hideWindow: () => Promise<void>;
+      focusApp: (appName: string) => Promise<boolean>;
+
+      // App mode control
+      appModeStart: () => Promise<void>;
+      appModeEnd: () => Promise<void>;
+
+      // Memory information
+      getMemoryInfo: () => Promise<import("./types").MemoryInfo>;
+
+      // Focus statistics
+      getFocusStats: () => Promise<any>;
+      getDataInfo: () => Promise<any>;
+
+      // Notification system
+      getNotifications: () => Promise<any[]>;
+      markNotificationRead: (notificationId: string) => Promise<boolean>;
+      getNotificationSettings: () => Promise<any>;
+      saveNotificationSettings: (settings: any) => Promise<boolean>;
+      getNotificationStats: () => Promise<any>;
+      quitRecommendedApp: (appName: string) => Promise<boolean>;
+
+      // Real-time event listeners
+      onActiveAppChanged: (callback: (appName: string) => void) => void;
+      onNewAnalysisNotification: (
+        callback: (notification: any) => void
+      ) => void;
     };
   }
 }

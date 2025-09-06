@@ -3,7 +3,17 @@ import { screen } from "electron";
 import * as os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WindowState, WindowInfo, Display, WindowAction, CpuInfo, ProcessInfo, AppResourceUsage } from "./types";
+import {
+  WindowState,
+  WindowInfo,
+  Display,
+  WindowAction,
+  CpuInfo,
+  ProcessInfo,
+  AppResourceUsage,
+  MemoryInfo,
+  MemoryPressureLevel,
+} from "./types";
 import { GraphManager } from "./graphManager";
 
 const execAsync = promisify(exec);
@@ -11,7 +21,8 @@ const execAsync = promisify(exec);
 export class WindowManager {
   private claudeService?: any; // ClaudeServiceのインスタンス
   private graphManager: GraphManager;
-  
+  private lastActiveApp?: string; // 前回のアクティブアプリを記憶
+
   constructor(claudeService?: any) {
     this.claudeService = claudeService;
     this.graphManager = new GraphManager();
@@ -23,7 +34,10 @@ export class WindowManager {
     const cpuInfo = await this.getCpuInfo();
 
     // ウィンドウとプロセスのCPU/メモリ使用率を関連付け
-    const windowsWithResourceUsage = await this.enrichWindowsWithResourceUsage(windows, cpuInfo.processes);
+    const windowsWithResourceUsage = await this.enrichWindowsWithResourceUsage(
+      windows,
+      cpuInfo.processes
+    );
 
     // Check for unknown apps and generate descriptions
     await this.checkAndGenerateAppDescriptions(windowsWithResourceUsage);
@@ -123,7 +137,9 @@ export class WindowManager {
                     const attrName = attr.name();
                     if (attrName === "AXMinimized") {
                       isMinimized = attr.value() || false;
-                      console.log(`Window ${windowName}: AXMinimized = ${isMinimized}`);
+                      console.log(
+                        `Window ${windowName}: AXMinimized = ${isMinimized}`
+                      );
                       break;
                     }
                   }
@@ -215,10 +231,120 @@ export class WindowManager {
   }
 
   private async getActiveApp(): Promise<string> {
-    return await run<string>(() => {
-      const se = Application("System Events");
-      return se.processes.whose({ frontmost: true })[0].name();
-    });
+    try {
+      // osascriptを使って外部プロセスからアクティブアプリを取得
+      const { stdout } = await execAsync(
+        `osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`
+      );
+      const appName = stdout.trim();
+
+      console.log("Current active app (raw):", appName);
+
+      // Electronアプリ自体の場合の処理
+      if (appName === "Electron" || appName === "Window AI Manager") {
+        // Electronがフォーカスされている時は、最新の「前のアクティブアプリ」を探す
+        console.log("Electron is focused - checking for actual active app");
+        const currentActiveApp = await this.getRealActiveApp();
+
+        if (
+          currentActiveApp &&
+          currentActiveApp !== "Electron" &&
+          currentActiveApp !== "Window AI Manager"
+        ) {
+          console.log("Real active app detected:", currentActiveApp);
+          this.lastActiveApp = currentActiveApp;
+          return currentActiveApp;
+        }
+
+        // 見つからなければ前回の値を使用
+        return this.lastActiveApp || "Window AI Manager (フォーカス中)";
+      }
+
+      // 有効なアプリ名なら保存して返す
+      this.lastActiveApp = appName;
+      return appName;
+    } catch (error) {
+      console.error("Error getting active app:", error);
+      return "Unknown";
+    }
+  }
+
+  private async getRealActiveApp(): Promise<string | null> {
+    try {
+      // より詳細な方法で実際にアクティブなアプリを取得
+      // 最近アクティブになったプロセスを確認
+      const { stdout } = await execAsync(`osascript -e '
+        tell application "System Events"
+          set allProcs to (every process whose visible is true)
+          set activeProc to ""
+          
+          -- フロントモストではない、最も最近使用されたプロセスを探す
+          repeat with proc in allProcs
+            set procName to name of proc
+            if procName is not "Electron" and procName is not "Window AI Manager" then
+              set activeProc to procName
+              exit repeat
+            end if
+          end repeat
+          
+          return activeProc
+        end tell
+      '`);
+
+      const realApp = stdout.trim();
+      console.log("Real active app search result:", realApp);
+      return realApp !== "" ? realApp : null;
+    } catch (error) {
+      console.error("Error getting real active app:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 実際に現在フォーカスされているアプリを取得（定期監視用）
+   */
+  async getCurrentActiveApp(): Promise<string> {
+    try {
+      // 直接的にフロントモストアプリを取得
+      const { stdout } = await execAsync(
+        `osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`
+      );
+      const currentApp = stdout.trim();
+
+      // Electronアプリ以外なら、そのまま返す
+      if (currentApp !== "Electron" && currentApp !== "Window AI Manager") {
+        return currentApp;
+      }
+
+      // ElectronがフォーカスされているならWindow AI Managerと表示
+      return "Window AI Manager";
+    } catch (error) {
+      console.error("Error getting current active app:", error);
+      return "Unknown";
+    }
+  }
+
+  private async getPreviousActiveApp(): Promise<string | null> {
+    try {
+      // 過去数秒間のアクティブアプリ履歴を確認（簡易版）
+      // 実際には、最近使用したアプリケーションを取得
+      const { stdout } = await execAsync(`osascript -e '
+        tell application "System Events"
+          set recentApps to {}
+          repeat with proc in (processes whose background only is false)
+            set end of recentApps to name of proc
+          end repeat
+          return item 2 of recentApps
+        end tell
+      '`);
+
+      const recentApp = stdout.trim();
+      console.log("Recent app found:", recentApp);
+      return recentApp;
+    } catch (error) {
+      console.error("Error getting previous active app:", error);
+      return null;
+    }
   }
 
   async executeAction(action: WindowAction): Promise<boolean> {
@@ -517,18 +643,18 @@ export class WindowManager {
           try {
             const se = Application("System Events");
             const app = Application(appName);
-            
+
             // まずアプリをアクティブにする
             app.activate();
-            
+
             // System Eventsでウィンドウを取得
             const process = se.processes[appName];
             const windows = process.windows();
-            
+
             for (let i = 0; i < windows.length; i++) {
               const win = windows[i];
               const winName = win.name();
-              
+
               if (
                 winName === windowTitle ||
                 (windowTitle.includes("window-") &&
@@ -548,7 +674,7 @@ export class WindowManager {
                 } catch (attrErr) {
                   // エラー時はサイレントに
                 }
-                
+
                 if (isMinimized) {
                   // 最小化されたウィンドウを即座に復元
                   try {
@@ -568,7 +694,7 @@ export class WindowManager {
                     // エラー時はサイレントに処理
                   }
                 }
-                
+
                 // 最大化されている場合の処理
                 const currentSize = win.size();
                 if (currentSize[0] >= 1900 && currentSize[1] >= 1000) {
@@ -576,13 +702,13 @@ export class WindowManager {
                   win.size = [1200, 800];
                   return { success: true, message: "Restored from maximize" };
                 }
-                
+
                 // すでに通常状態
                 app.activate();
                 return { success: true, message: "Window activated" };
               }
             }
-            
+
             return { success: false, message: "Window not found" };
           } catch (error) {
             console.log(`Error in restore: ${error}`);
@@ -613,18 +739,18 @@ export class WindowManager {
         try {
           const se = Application("System Events");
           const app = Application(appName);
-          
+
           // まずアプリをアクティブにする
           app.activate();
-          
+
           // System Eventsでウィンドウを取得
           const process = se.processes[appName];
           const windows = process.windows();
-          
+
           for (let i = 0; i < windows.length; i++) {
             const win = windows[i];
             const winName = win.name();
-            
+
             if (
               winName === windowTitle ||
               (windowTitle.includes("window-") &&
@@ -648,10 +774,10 @@ export class WindowManager {
               } catch (attrErr) {
                 // エラー時はサイレントに処理
               }
-              
+
               // アプリを前面に
               process.frontmost = true;
-              
+
               // ウィンドウをアクティブにする（ボタンをクリックせずに）
               try {
                 // AXRaise アクションを実行してウィンドウを前面に
@@ -659,11 +785,11 @@ export class WindowManager {
               } catch (raiseErr) {
                 // AXRaiseが使えない場合は、アプリのアクティブ化のみ
               }
-              
+
               return true;
             }
           }
-          
+
           return false;
         } catch {
           return false;
@@ -890,6 +1016,31 @@ export class WindowManager {
     }
   }
 
+  async focusApp(appName: string): Promise<boolean> {
+    try {
+      const result = await run<boolean>((appName) => {
+        try {
+          const app = Application(appName);
+          app.activate();
+
+          // ウィンドウを前面に持ってくる
+          const se = Application("System Events");
+          se.processes[appName].frontmost = true;
+
+          return true;
+        } catch (err) {
+          console.error(`Error focusing app ${appName}:`, err);
+          return false;
+        }
+      }, appName);
+
+      return result;
+    } catch (error) {
+      console.error("Error in focusApp:", error);
+      return false;
+    }
+  }
+
   async getCpuInfo(): Promise<CpuInfo> {
     try {
       // Node.jsのosモジュールでCPU情報を取得
@@ -902,9 +1053,11 @@ export class WindowManager {
 
       // プロセス情報を取得（複数の方法を試す）
       const processes = await this.getTopProcessesWithFallback();
-      
+
       // プロセスの説明をAIで生成
-      const processesWithDescriptions = await this.addProcessDescriptions(processes);
+      const processesWithDescriptions = await this.addProcessDescriptions(
+        processes
+      );
 
       return {
         model,
@@ -924,30 +1077,143 @@ export class WindowManager {
     }
   }
 
+  async getMemoryInfo(): Promise<MemoryInfo> {
+    try {
+      // 1) memory_pressure -l を優先
+      const mp = await execAsync("memory_pressure -l");
+      const level = this.parseMemoryPressureLevel(mp.stdout || mp.stderr || "");
+      if (level) {
+        const nodeInfo = this.getNodeMemorySnapshot(level, "memory_pressure");
+        return nodeInfo;
+      }
+    } catch (e) {
+      // ignore and fallback
+    }
+
+    try {
+      // 2) vm_stat で概算
+      const { stdout } = await execAsync("vm_stat");
+      const vm = this.parseVmStat(stdout);
+      if (vm) {
+        return vm;
+      }
+    } catch (e) {
+      // ignore and fallback
+    }
+
+    // 3) Nodeのosで大雑把に
+    return this.getNodeMemorySnapshot("normal", "node");
+  }
+
+  private parseMemoryPressureLevel(output: string): MemoryPressureLevel | null {
+    const lower = output.toLowerCase();
+    if (lower.includes("normal")) return "normal";
+    if (lower.includes("warning")) return "warning";
+    if (lower.includes("critical")) return "critical";
+    return null;
+  }
+
+  private getNodeMemorySnapshot(
+    level: MemoryPressureLevel,
+    source: MemoryInfo["source"]
+  ): MemoryInfo {
+    const totalMB = Math.round((os.totalmem() / 1024 / 1024) * 10) / 10;
+    const freeMB = Math.round((os.freemem() / 1024 / 1024) * 10) / 10;
+    const usedMB = Math.max(totalMB - freeMB, 0);
+    const usedPercent =
+      totalMB > 0 ? Math.round((usedMB / totalMB) * 1000) / 10 : 0;
+    return {
+      totalMB,
+      usedMB,
+      freeMB,
+      usedPercent,
+      pressure: level,
+      source,
+      timestamp: Date.now(),
+    };
+  }
+
+  private parseVmStat(stdout: string): MemoryInfo | null {
+    try {
+      // vm_stat の各行から数字を抽出（pagesizeは4096バイトが多い）
+      const pageSizeMatch = stdout.match(/page size of (\d+) bytes/);
+      const pageSize = pageSizeMatch ? parseInt(pageSizeMatch[1], 10) : 4096;
+
+      const parseLine = (key: string) => {
+        const m = stdout.match(new RegExp(`${key}:\\s+(\\d+)\\.`));
+        return m ? parseInt(m[1], 10) : 0;
+      };
+
+      const free = parseLine("Pages free");
+      const speculative = parseLine("Pages speculative");
+      const active = parseLine("Pages active");
+      const inactive = parseLine("Pages inactive");
+      const wired = parseLine("Pages wired down|Pages wired");
+      const purgeable = parseLine("Pages purgeable");
+      const compressed = parseLine("Pages occupied by compressor");
+
+      const freePages = free + speculative;
+      const usedPages = active + inactive + wired + compressed; // 概算
+
+      const totalPages = freePages + usedPages;
+      if (totalPages <= 0) return null;
+
+      const totalMB =
+        Math.round(((totalPages * pageSize) / 1024 / 1024) * 10) / 10;
+      const freeMB =
+        Math.round(((freePages * pageSize) / 1024 / 1024) * 10) / 10;
+      const usedMB = Math.max(totalMB - freeMB, 0);
+      const usedPercent =
+        totalMB > 0 ? Math.round((usedMB / totalMB) * 1000) / 10 : 0;
+
+      let pressure: MemoryPressureLevel = "normal";
+      if (usedPercent >= 80) pressure = "critical";
+      else if (usedPercent >= 60) pressure = "warning";
+
+      return {
+        totalMB,
+        usedMB,
+        freeMB,
+        usedPercent,
+        pressure,
+        source: "vm_stat",
+        timestamp: Date.now(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   private async calculateCpuUsage(): Promise<number> {
     return new Promise((resolve) => {
       const startMeasure = os.cpus();
-      
+
       setTimeout(() => {
         const endMeasure = os.cpus();
-        
+
         let totalIdle = 0;
         let totalTick = 0;
-        
+
         for (let i = 0; i < startMeasure.length; i++) {
           const startCpu = startMeasure[i];
           const endCpu = endMeasure[i];
-          
-          const startTotal = Object.values(startCpu.times).reduce((acc, time) => acc + time, 0);
-          const endTotal = Object.values(endCpu.times).reduce((acc, time) => acc + time, 0);
-          
+
+          const startTotal = Object.values(startCpu.times).reduce(
+            (acc, time) => acc + time,
+            0
+          );
+          const endTotal = Object.values(endCpu.times).reduce(
+            (acc, time) => acc + time,
+            0
+          );
+
           const startIdle = startCpu.times.idle;
           const endIdle = endCpu.times.idle;
-          
+
           totalIdle += endIdle - startIdle;
           totalTick += endTotal - startTotal;
         }
-        
+
         const usage = 100 - Math.round((100 * totalIdle) / totalTick);
         resolve(usage);
       }, 100); // 100ms間隔で測定
@@ -958,7 +1224,7 @@ export class WindowManager {
     const methods = [
       { name: "PS", fn: () => this.getTopProcessesPS() },
       { name: "Node.js", fn: () => this.getTopProcessesNode() },
-      { name: "JXA", fn: () => this.getTopProcessesJXA() }
+      { name: "JXA", fn: () => this.getTopProcessesJXA() },
     ];
 
     for (const method of methods) {
@@ -980,53 +1246,64 @@ export class WindowManager {
   private async getTopProcessesNode(): Promise<ProcessInfo[]> {
     try {
       // CPU使用率順でソートし、より多くのプロセスを取得
-      const { stdout } = await execAsync("top -l 1 -n 20 -o cpu -stats pid,command,cpu,mem");
+      const { stdout } = await execAsync(
+        "top -l 1 -n 20 -o cpu -stats pid,command,cpu,mem"
+      );
       const lines = stdout.split("\n");
-      
+
       const processes: ProcessInfo[] = [];
       let dataStarted = false;
-      
+
       // デバッグ用ログは本番では無効化
       // console.log("Node.js top output first 3 lines:");
       // lines.slice(0, 3).forEach((line, i) => console.log(`${i}: ${line}`));
-      
+
       for (const line of lines) {
         // ヘッダー行を探す
-        if (line.includes("PID") && (line.includes("COMMAND") || line.includes("COMM"))) {
+        if (
+          line.includes("PID") &&
+          (line.includes("COMMAND") || line.includes("COMM"))
+        ) {
           dataStarted = true;
           // console.log("Found header:", line);
           continue;
         }
-        
+
         if (dataStarted && line.trim()) {
           const parts = line.trim().split(/\s+/);
-          
-            if (parts.length >= 8) { // メモリ情報も含むため最低8要素必要
-              const pid = parseInt(parts[0]);
-              const command = parts[1]; // 2番目の要素がCOMMAND
-              const cpuUsage = parseFloat(parts[2]);
-              const memoryStr = parts[7]; // 8番目の要素がMEM
-              
-              if (!isNaN(pid) && !isNaN(cpuUsage) && command && command !== 'N/A') {
-                const processName = this.extractProcessName(command);
-                const memoryUsage = this.parseMemoryFromTop(memoryStr);
-                
-                processes.push({
-                  pid,
-                  name: processName,
-                  cpuUsage,
-                  memoryUsage,
-                });
-              }
+
+          if (parts.length >= 8) {
+            // メモリ情報も含むため最低8要素必要
+            const pid = parseInt(parts[0]);
+            const command = parts[1]; // 2番目の要素がCOMMAND
+            const cpuUsage = parseFloat(parts[2]);
+            const memoryStr = parts[7]; // 8番目の要素がMEM
+
+            if (
+              !isNaN(pid) &&
+              !isNaN(cpuUsage) &&
+              command &&
+              command !== "N/A"
+            ) {
+              const processName = this.extractProcessName(command);
+              const memoryUsage = this.parseMemoryFromTop(memoryStr);
+
+              processes.push({
+                pid,
+                name: processName,
+                cpuUsage,
+                memoryUsage,
+              });
             }
+          }
         }
       }
-      
+
       // CPU使用率でソート（高い順）
       processes.sort((a, b) => b.cpuUsage - a.cpuUsage);
-      
+
       console.log(`Found ${processes.length} processes via Node.js`);
-      
+
       return processes.slice(0, 5);
     } catch (error) {
       console.error("Node.js top command failed:", error);
@@ -1038,28 +1315,28 @@ export class WindowManager {
     try {
       // psコマンドでCPU使用率順にプロセスを取得（より多くのプロセスを対象）
       const { stdout } = await execAsync("ps aux | sort -nr -k 3 | head -50");
-      const lines = stdout.split("\n").filter(line => line.trim());
-      
+      const lines = stdout.split("\n").filter((line) => line.trim());
+
       const processes: ProcessInfo[] = [];
-      
+
       // console.log("PS command output:");
       // lines.forEach((line, i) => console.log(`${i}: ${line}`));
-      
+
       for (const line of lines) {
         if (line.trim()) {
           const parts = line.trim().split(/\s+/);
-          
+
           if (parts.length >= 11) {
             const pid = parseInt(parts[1]);
             const cpuUsage = parseFloat(parts[2]);
             const rssMemory = parts[5]; // RSS列（実メモリ使用量）
             const command = parts.slice(10).join(" "); // コマンド部分
-            
+
             if (!isNaN(pid) && !isNaN(cpuUsage)) {
               // プロセス名を短縮（パスから実行ファイル名のみ抽出）
               const processName = this.extractProcessName(command);
               const memoryMB = this.parseMemoryFromPS(rssMemory);
-              
+
               processes.push({
                 pid,
                 name: processName,
@@ -1070,13 +1347,13 @@ export class WindowManager {
           }
         }
       }
-      
+
       // CPU使用率でソート
       processes.sort((a, b) => b.cpuUsage - a.cpuUsage);
-      
+
       // 特定のアプリのプロセスを追加で検索（CPU使用率が低くても重要なアプリ）
       await this.addMissingAppProcesses(processes);
-      
+
       console.log(`Found ${processes.length} processes via PS`);
       return processes.slice(0, 10);
     } catch (error) {
@@ -1091,50 +1368,58 @@ export class WindowManager {
         // JXAでtopコマンドの結果を取得
         const app = Application.currentApplication();
         app.includeStandardAdditions = true;
-        
+
         try {
           // topコマンドを実行してプロセス情報を取得
           const result = app.doShellScript("top -l 1 -n 10 -o cpu");
           const lines = result.split("\n");
-          
+
           const processes: any[] = [];
           let dataStarted = false;
           const debugInfo: any = {
             totalLines: lines.length,
             headerFound: false,
             processLines: [],
-            rawOutput: result.substring(0, 500) // 最初の500文字のみログ
+            rawOutput: result.substring(0, 500), // 最初の500文字のみログ
           };
-          
+
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            
+
             // ヘッダー行を探す（複数のパターンを試す）
-            if (line.includes("PID") && (line.includes("COMMAND") || line.includes("COMM"))) {
+            if (
+              line.includes("PID") &&
+              (line.includes("COMMAND") || line.includes("COMM"))
+            ) {
               dataStarted = true;
               debugInfo.headerFound = true;
               debugInfo.headerLine = line;
               continue;
             }
-            
+
             if (dataStarted && line.trim()) {
               const parts = line.trim().split(/\s+/);
               debugInfo.processLines.push({
                 line: line,
                 parts: parts,
-                partsLength: parts.length
+                partsLength: parts.length,
               });
-              
+
               if (parts.length >= 8) {
                 const pid = parseInt(parts[0]);
                 const command = parts[1]; // 2番目の要素がCOMMAND
                 const cpuUsage = parseFloat(parts[2]);
                 const memoryStr = parts[7]; // 8番目の要素がMEM
-                
-                if (!isNaN(pid) && !isNaN(cpuUsage) && command && command !== 'N/A') {
+
+                if (
+                  !isNaN(pid) &&
+                  !isNaN(cpuUsage) &&
+                  command &&
+                  command !== "N/A"
+                ) {
                   const processName = this.extractProcessName(command);
                   const memoryUsage = this.parseMemoryFromTop(memoryStr);
-                  
+
                   processes.push({
                     pid,
                     name: processName,
@@ -1145,24 +1430,24 @@ export class WindowManager {
               }
             }
           }
-          
+
           return {
             processes: processes.slice(0, 5),
-            debug: debugInfo
+            debug: debugInfo,
           };
         } catch (error) {
           return {
             processes: [],
-            error: String(error)
+            error: String(error),
           };
         }
       });
-      
+
       // エラーログのみ出力
       if (processData?.error) {
         console.error("Top command error:", processData.error);
       }
-      
+
       return processData?.processes || [];
     } catch (error) {
       console.error("Error getting top processes:", error);
@@ -1170,15 +1455,17 @@ export class WindowManager {
     }
   }
 
-  private async addProcessDescriptions(processes: ProcessInfo[]): Promise<ProcessInfo[]> {
+  private async addProcessDescriptions(
+    processes: ProcessInfo[]
+  ): Promise<ProcessInfo[]> {
     if (!this.claudeService || processes.length === 0) {
       return processes;
     }
 
     try {
       console.log("Generating AI descriptions for processes...");
-      
-      const processNames = processes.map(p => p.name).join(', ');
+
+      const processNames = processes.map((p) => p.name).join(", ");
       const prompt = `以下のmacOSプロセスについて、それぞれ1行で簡潔に説明してください（各プロセス名: 説明の形式で）：
 
 ${processNames}
@@ -1188,32 +1475,33 @@ Safari: Appleのウェブブラウザ
 WindowServer: macOSの画面描画を管理するシステムプロセス`;
 
       const response = await this.claudeService.analyzeWindowState(
-        { windows: [], displays: [], activeApp: '', timestamp: Date.now() },
+        { windows: [], displays: [], activeApp: "", timestamp: Date.now() },
         prompt
       );
 
-      const descriptions = this.parseProcessDescriptions(response.explanation || '');
-      
+      const descriptions = this.parseProcessDescriptions(
+        response.explanation || ""
+      );
+
       // プロセスに説明を追加
-      return processes.map(process => ({
+      return processes.map((process) => ({
         ...process,
-        description: descriptions[process.name] || 'システムプロセス'
+        description: descriptions[process.name] || "システムプロセス",
       }));
-      
     } catch (error) {
-      console.error('Error generating process descriptions:', error);
+      console.error("Error generating process descriptions:", error);
       // エラーの場合はデフォルト説明を追加
-      return processes.map(process => ({
+      return processes.map((process) => ({
         ...process,
-        description: this.getDefaultDescription(process.name)
+        description: this.getDefaultDescription(process.name),
       }));
     }
   }
 
   private parseProcessDescriptions(text: string): Record<string, string> {
     const descriptions: Record<string, string> = {};
-    const lines = text.split('\n');
-    
+    const lines = text.split("\n");
+
     for (const line of lines) {
       const match = line.match(/^(.+?):\s*(.+)$/);
       if (match) {
@@ -1222,31 +1510,36 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
         descriptions[processName] = description;
       }
     }
-    
+
     return descriptions;
   }
 
-  private async checkAndGenerateAppDescriptions(windows: WindowInfo[]): Promise<void> {
+  private async checkAndGenerateAppDescriptions(
+    windows: WindowInfo[]
+  ): Promise<void> {
     try {
       // Get unique app names from windows
-      const appNames = [...new Set(windows.map(w => w.appName))];
-      
+      const appNames = [...new Set(windows.map((w) => w.appName))];
+
       // Check which apps are unknown
       const unknownApps = this.graphManager.getUnknownApplications(appNames);
-      
+
       if (unknownApps.length > 0 && this.claudeService) {
-        console.log(`Found ${unknownApps.length} unknown apps, generating descriptions...`);
-        
+        console.log(
+          `Found ${unknownApps.length} unknown apps, generating descriptions...`
+        );
+
         // Generate descriptions for unknown apps
-        const descriptions = await this.claudeService.generateApplicationDescriptions(unknownApps);
-        
+        const descriptions =
+          await this.claudeService.generateApplicationDescriptions(unknownApps);
+
         // Add apps to graph
         this.graphManager.addApplications(descriptions);
-        
+
         console.log(`Added ${descriptions.length} apps to knowledge graph`);
       }
     } catch (error) {
-      console.error('Error checking/generating app descriptions:', error);
+      console.error("Error checking/generating app descriptions:", error);
     }
   }
 
@@ -1257,103 +1550,109 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
 
   private getDefaultDescription(processName: string): string {
     const defaultDescriptions: Record<string, string> = {
-      'kernel_task': 'macOSカーネルタスク（システム核心部）',
-      'WindowServer': 'macOS画面描画管理システム',
-      'Safari': 'Appleのウェブブラウザ',
-      'Chrome': 'Googleのウェブブラウザ',
-      'Firefox': 'Mozillaのウェブブラウザ',
-      'Arc': 'The Browser Companyのウェブブラウザ',
-      'Cursor': 'AI統合型コードエディタ',
-      'electron': 'Electronアプリケーションフレームワーク',
-      'Discord': 'ゲーマー向けチャットアプリ',
-      'Teracy': 'リモートワーカー向けオンラインワークスペース', 
-      'Notion': 'ノート・ドキュメント管理アプリ',
-      'Slack': 'ビジネスチャットアプリ',
-      'ChatGPT': 'OpenAIのAIチャットアプリケーション',
-      'Terminal': 'macOS標準ターミナルアプリ',
-      'Activity Monitor': 'macOSシステム監視ツール',
-      'coreaudiod': 'macOSオーディオシステム',
-      'distnoted': 'macOS通知配信システム',
-      'mobileassetd': 'macOSアセット管理システム',
-      'photolibraryd': '写真ライブラリ管理システム',
-      'photoanalysisd': '写真解析・顔認識システム'
+      kernel_task: "macOSカーネルタスク（システム核心部）",
+      WindowServer: "macOS画面描画管理システム",
+      Safari: "Appleのウェブブラウザ",
+      Chrome: "Googleのウェブブラウザ",
+      Firefox: "Mozillaのウェブブラウザ",
+      Arc: "The Browser Companyのウェブブラウザ",
+      Cursor: "AI統合型コードエディタ",
+      electron: "Electronアプリケーションフレームワーク",
+      Discord: "ゲーマー向けチャットアプリ",
+      Teracy: "リモートワーカー向けオンラインワークスペース",
+      Notion: "ノート・ドキュメント管理アプリ",
+      Slack: "ビジネスチャットアプリ",
+      ChatGPT: "OpenAIのAIチャットアプリケーション",
+      Terminal: "macOS標準ターミナルアプリ",
+      "Activity Monitor": "macOSシステム監視ツール",
+      coreaudiod: "macOSオーディオシステム",
+      distnoted: "macOS通知配信システム",
+      mobileassetd: "macOSアセット管理システム",
+      photolibraryd: "写真ライブラリ管理システム",
+      photoanalysisd: "写真解析・顔認識システム",
     };
-    
-    return defaultDescriptions[processName] || 'システムプロセス';
+
+    return defaultDescriptions[processName] || "システムプロセス";
   }
 
   private extractProcessName(fullCommand: string): string {
     // パスから実行ファイル名のみ抽出
-    if (fullCommand.includes('/')) {
+    if (fullCommand.includes("/")) {
       // アプリケーション名を抽出（例：/Applications/Cursor.app/... -> Cursor）
       const appMatch = fullCommand.match(/\/Applications\/([^\/]+)\.app\//);
       if (appMatch) {
         return appMatch[1];
       }
-      
+
       // System系のアプリ（例：/System/Library/CoreServices/ControlCenter.app/... -> ControlCenter）
-      const systemAppMatch = fullCommand.match(/\/([^\/]+)\.app\/Contents\/MacOS\/([^\/\s]+)/);
+      const systemAppMatch = fullCommand.match(
+        /\/([^\/]+)\.app\/Contents\/MacOS\/([^\/\s]+)/
+      );
       if (systemAppMatch) {
         return systemAppMatch[1];
       }
-      
+
       // Helper系の場合は親アプリ名を抽出
       const helperMatch = fullCommand.match(/\/([^\/]+)\.app\/.*\/([^\/\s]+)/);
       if (helperMatch) {
         const appName = helperMatch[1];
         const executableName = helperMatch[2];
-        
-        if (executableName.includes('Helper')) {
+
+        if (executableName.includes("Helper")) {
           return appName;
         }
       }
-      
+
       // 最後の手段：最後のパス要素を取得
-      const parts = fullCommand.split('/');
+      const parts = fullCommand.split("/");
       let executableName = parts[parts.length - 1];
-      
+
       // スペースで区切られている場合は最初の部分のみ
-      if (executableName.includes(' ')) {
-        executableName = executableName.split(' ')[0];
+      if (executableName.includes(" ")) {
+        executableName = executableName.split(" ")[0];
       }
-      
+
       return executableName;
     }
-    
+
     // パスでない場合はそのまま返す（スペース区切りの最初の部分のみ）
-    return fullCommand.split(' ')[0];
+    return fullCommand.split(" ")[0];
   }
 
-  private async enrichWindowsWithResourceUsage(windows: WindowInfo[], processes: ProcessInfo[]): Promise<WindowInfo[]> {
+  private async enrichWindowsWithResourceUsage(
+    windows: WindowInfo[],
+    processes: ProcessInfo[]
+  ): Promise<WindowInfo[]> {
     try {
       // アプリ名ごとにプロセスをグループ化してCPU/メモリ使用量を集計
       const appResourceMap = this.buildAppResourceMap(processes);
-      
+
       // ウィンドウにリソース使用量を追加
-      return windows.map(window => {
+      return windows.map((window) => {
         const normalizedAppName = this.normalizeAppName(window.appName);
         const resourceUsage = appResourceMap.get(normalizedAppName);
 
         return {
           ...window,
           cpuUsage: resourceUsage?.totalCpu || 0,
-          memoryUsage: resourceUsage?.totalMemory || 0
+          memoryUsage: resourceUsage?.totalMemory || 0,
         };
       });
-      
     } catch (error) {
       console.error("Error in enrichWindowsWithResourceUsage:", error);
       return this.addDefaultResourceUsage(windows);
     }
   }
 
-  private buildAppResourceMap(processes: ProcessInfo[]): Map<string, AppResourceUsage> {
+  private buildAppResourceMap(
+    processes: ProcessInfo[]
+  ): Map<string, AppResourceUsage> {
     const appResourceMap = new Map<string, AppResourceUsage>();
 
     for (const process of processes) {
       try {
         const appName = this.mapProcessToAppName(process.name);
-        
+
         if (appResourceMap.has(appName)) {
           const existing = appResourceMap.get(appName)!;
           existing.totalCpu += process.cpuUsage;
@@ -1363,7 +1662,7 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
           appResourceMap.set(appName, {
             totalCpu: process.cpuUsage,
             totalMemory: process.memoryUsage,
-            processCount: 1
+            processCount: 1,
           });
         }
       } catch (error) {
@@ -1375,46 +1674,46 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
   }
 
   private addDefaultResourceUsage(windows: WindowInfo[]): WindowInfo[] {
-    return windows.map(window => ({
+    return windows.map((window) => ({
       ...window,
       cpuUsage: 0,
-      memoryUsage: 0
+      memoryUsage: 0,
     }));
   }
 
   // アプリ名マッピングテーブル（統合）
   private static readonly APP_MAPPINGS: Record<string, string> = {
     // メインアプリ
-    'Cursor': 'Cursor',
-    'Arc': 'Arc', 
-    'Teracy': 'Teracy',
-    'Discord': 'Discord',
-    'Notion': 'Notion',
-    'ChatGPT': 'ChatGPT',
-    'Safari': 'Safari',
-    'Slack': 'Slack',
-    'Terminal': 'Terminal',
-    'Activity Monitor': 'Activity Monitor',
-    'RescueTime': 'RescueTime',
-    
+    Cursor: "Cursor",
+    Arc: "Arc",
+    Teracy: "Teracy",
+    Discord: "Discord",
+    Notion: "Notion",
+    ChatGPT: "ChatGPT",
+    Safari: "Safari",
+    Slack: "Slack",
+    Terminal: "Terminal",
+    "Activity Monitor": "Activity Monitor",
+    RescueTime: "RescueTime",
+
     // Helper プロセス
-    'Cursor Helper': 'Cursor',
-    'Browser Helper': 'Arc',
-    'Arc Helper': 'Arc',
-    'Teracy Helper': 'Teracy', 
-    'Discord Helper': 'Discord',
-    'Notion Helper': 'Notion',
-    'Chrome Helper': 'Google Chrome',
-    
+    "Cursor Helper": "Cursor",
+    "Browser Helper": "Arc",
+    "Arc Helper": "Arc",
+    "Teracy Helper": "Teracy",
+    "Discord Helper": "Discord",
+    "Notion Helper": "Notion",
+    "Chrome Helper": "Google Chrome",
+
     // システムアプリ
-    'ControlCenter': 'Control Center',
-    'Control Center': 'Control Center',
-    
+    ControlCenter: "Control Center",
+    "Control Center": "Control Center",
+
     // Electron系
-    'app.asar': 'Electron App',
-    'app': 'Electron App',
-    'Electron': 'Electron App',
-    'Electron Helper': 'Electron App'
+    "app.asar": "Electron App",
+    app: "Electron App",
+    Electron: "Electron App",
+    "Electron Helper": "Electron App",
   };
 
   private mapProcessToAppName(processName: string): string {
@@ -1424,7 +1723,9 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
     }
 
     // 部分一致チェック
-    for (const [processKey, appName] of Object.entries(WindowManager.APP_MAPPINGS)) {
+    for (const [processKey, appName] of Object.entries(
+      WindowManager.APP_MAPPINGS
+    )) {
       if (processName.includes(processKey)) {
         return appName;
       }
@@ -1440,60 +1741,70 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
 
   private parseMemoryFromPS(rssValue: string): number {
     // PSコマンドのRSS列をMBに変換（単位：KB）
-    return this.parseMemoryValue(rssValue, 'KB');
+    return this.parseMemoryValue(rssValue, "KB");
   }
 
   private parseMemoryFromTop(memoryStr: string): number {
     // topコマンドのMEM列をMBに変換（K/M/G単位）
     if (!memoryStr) return 0;
-    
-    if (memoryStr.includes('M')) {
-      return this.parseMemoryValue(memoryStr.replace('M', ''), 'MB');
-    } else if (memoryStr.includes('K')) {
-      return this.parseMemoryValue(memoryStr.replace('K', ''), 'KB');
-    } else if (memoryStr.includes('G')) {
-      return this.parseMemoryValue(memoryStr.replace('G', ''), 'GB');
+
+    if (memoryStr.includes("M")) {
+      return this.parseMemoryValue(memoryStr.replace("M", ""), "MB");
+    } else if (memoryStr.includes("K")) {
+      return this.parseMemoryValue(memoryStr.replace("K", ""), "KB");
+    } else if (memoryStr.includes("G")) {
+      return this.parseMemoryValue(memoryStr.replace("G", ""), "GB");
     }
-    
+
     return 0;
   }
 
-  private parseMemoryValue(value: string, unit: 'KB' | 'MB' | 'GB'): number {
+  private parseMemoryValue(value: string, unit: "KB" | "MB" | "GB"): number {
     // 数値以外の文字を除去してパース
-    const cleanValue = value.replace(/[^\d.]/g, '');
+    const cleanValue = value.replace(/[^\d.]/g, "");
     const numericValue = parseFloat(cleanValue);
     if (isNaN(numericValue)) return 0;
-    
+
     // MBに統一
     switch (unit) {
-      case 'KB': return Math.round((numericValue / 1024) * 10) / 10;
-      case 'MB': return Math.round(numericValue * 10) / 10;
-      case 'GB': return Math.round((numericValue * 1024) * 10) / 10;
-      default: return 0;
+      case "KB":
+        return Math.round((numericValue / 1024) * 10) / 10;
+      case "MB":
+        return Math.round(numericValue * 10) / 10;
+      case "GB":
+        return Math.round(numericValue * 1024 * 10) / 10;
+      default:
+        return 0;
     }
   }
 
-  private async addMissingAppProcesses(existingProcesses: ProcessInfo[]): Promise<void> {
-    const importantApps = ['Slack', 'Terminal', 'Activity Monitor', 'ChatGPT'];
-    const existingAppNames = new Set(existingProcesses.map(p => this.mapProcessToAppName(p.name)));
-    
+  private async addMissingAppProcesses(
+    existingProcesses: ProcessInfo[]
+  ): Promise<void> {
+    const importantApps = ["Slack", "Terminal", "Activity Monitor", "ChatGPT"];
+    const existingAppNames = new Set(
+      existingProcesses.map((p) => this.mapProcessToAppName(p.name))
+    );
+
     for (const appName of importantApps) {
       if (!existingAppNames.has(appName)) {
         try {
           // 特定のアプリのプロセスを検索
-          const { stdout } = await execAsync(`ps aux | grep -i "${appName}" | grep -v grep | head -5`);
-          const lines = stdout.split("\n").filter(line => line.trim());
-          
+          const { stdout } = await execAsync(
+            `ps aux | grep -i "${appName}" | grep -v grep | head -5`
+          );
+          const lines = stdout.split("\n").filter((line) => line.trim());
+
           for (const line of lines) {
             const parts = line.trim().split(/\s+/);
             if (parts.length >= 11) {
               const pid = parseInt(parts[1]);
               const cpuUsage = parseFloat(parts[2]);
               const command = parts.slice(10).join(" ");
-              
+
               if (!isNaN(pid) && !isNaN(cpuUsage)) {
                 const processName = this.extractProcessName(command);
-                
+
                 existingProcesses.push({
                   pid,
                   name: processName,
@@ -1510,4 +1821,3 @@ WindowServer: macOSの画面描画を管理するシステムプロセス`;
     }
   }
 }
-

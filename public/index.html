@@ -12,6 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
       rel="stylesheet"
     />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       * {
         margin: 0;
@@ -22,11 +23,12 @@
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: transparent;
+        color: #333;
         height: 100vh;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
       }
 
       .reset-button {
@@ -58,11 +60,15 @@
       }
 
       .header {
-        padding: 30px 20px 20px;
+        padding: 20px;
         text-align: center;
-        background: rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 0 0 15px 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         -webkit-app-region: drag;
+        margin-bottom: 10px;
       }
 
       .header * {
@@ -77,6 +83,7 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
+        color: #333;
       }
 
       .header h1 .material-icons {
@@ -84,24 +91,32 @@
       }
 
       .header p {
-        opacity: 0.9;
+        opacity: 0.7;
         font-size: 14px;
+        color: #666;
       }
 
       .main-content {
         flex: 1;
-        padding: 20px;
+        padding: 10px 20px 20px;
         overflow-y: auto;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 15px 15px 0 0;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+        margin-top: -10px;
       }
 
       .input-section {
-        background: rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(12px);
-        border-radius: 16px;
-        padding: 22px;
-        margin-bottom: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
       }
 
       .input-group {
@@ -117,12 +132,16 @@
       /* input-group 内のデフォルト入力スタイル */
       .input-group input {
         flex: 1;
-        padding: 14px 16px;
-        background: rgba(255, 255, 255, 0.92);
-        color: #1f2937;
+        padding: 14px 18px;
+        background: rgba(255, 255, 255, 0.95);
+        color: #333;
         border: none;
-        font-size: 14px;
+        border-radius: 10px;
+        font-size: 16px;
         outline: none;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
       }
 
       #userIntent,
@@ -143,9 +162,9 @@
       }
 
       button {
-        padding: 12px 18px;
-        background: white;
-        color: #4f46e5;
+        padding: 12px 24px;
+        background: rgba(0, 122, 255, 0.9);
+        color: white;
         border: none;
         border-radius: 10px;
         font-size: 14px;
@@ -155,6 +174,9 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
+        box-shadow: 0 2px 10px rgba(0, 122, 255, 0.3);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
       }
 
       button .material-icons {
@@ -162,8 +184,9 @@
       }
 
       button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 122, 255, 0.4);
+        background: rgba(0, 122, 255, 1);
       }
 
       button:disabled {
@@ -260,14 +283,18 @@
 
       .quick-action {
         padding: 10px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: white;
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: #333;
         font-size: 13px;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 6px;
+        border-radius: 8px;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
       }
 
       .quick-action .material-icons {
@@ -275,15 +302,20 @@
       }
 
       .quick-action:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(0, 122, 255, 0.1);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
       }
 
       .status-section {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 15px;
         padding: 20px;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
       }
 
       .status-title {
@@ -293,6 +325,7 @@
         display: flex;
         align-items: center;
         gap: 8px;
+        color: #333;
       }
 
       .section-subtitle {
@@ -661,11 +694,14 @@
       }
 
       .cpu-section {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 15px;
         padding: 20px;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
       }
 
       .cpu-overview {
@@ -832,6 +868,539 @@
       .preset-btn.delete:hover {
         background: rgba(244, 67, 54, 0.5);
       }
+
+      .active-app-section {
+        padding: 15px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        margin-bottom: 15px;
+      }
+
+      .active-app-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .active-app-display {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+
+      .active-app-name {
+        font-size: 16px;
+        font-weight: 600;
+        color: #4ade80;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .active-app-name::before {
+        content: "▶";
+        font-size: 12px;
+        color: #4ade80;
+      }
+
+      .stats-section {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .stats-controls {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+      }
+
+      .stats-content {
+        margin-top: 15px;
+      }
+
+      .stats-summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      .summary-card {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+
+      .summary-label {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .summary-value {
+        font-size: 20px;
+        font-weight: bold;
+        color: #4ade80;
+      }
+
+      .stats-table table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .stats-table th {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 10px;
+        text-align: left;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        opacity: 0.8;
+      }
+
+      .stats-table td {
+        padding: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        font-size: 13px;
+      }
+
+      .stats-table .app-name {
+        font-weight: 600;
+      }
+
+      .stats-table .focus-time {
+        color: #4ade80;
+        font-weight: 600;
+      }
+
+      .stats-table .session-count {
+        color: #60a5fa;
+      }
+
+      .stats-table .avg-time {
+        color: #fbbf24;
+      }
+
+      .stats-table .last-used {
+        opacity: 0.7;
+        font-size: 12px;
+      }
+
+      .data-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .data-info-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+      }
+
+      .data-info-label {
+        opacity: 0.7;
+      }
+
+      .data-info-value {
+        font-weight: 600;
+        color: #4ade80;
+      }
+
+      /* 通知システム用スタイル */
+      .notifications-section {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .notifications-controls {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+      }
+
+      .notifications-content {
+        margin-top: 15px;
+      }
+
+      .notifications-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      .notification-summary-card {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+
+      .notifications-list {
+        max-height: 400px;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        padding: 10px;
+      }
+
+      .notification-item {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-left: 4px solid;
+        transition: all 0.2s;
+      }
+
+      .notification-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .notification-item.unread {
+        border-left-color: #4ade80;
+        background: rgba(74, 222, 128, 0.1);
+      }
+
+      .notification-item.urgent {
+        border-left-color: #ef4444;
+      }
+
+      .notification-item.high {
+        border-left-color: #f59e0b;
+      }
+
+      .notification-item.medium {
+        border-left-color: #3b82f6;
+      }
+
+      .notification-item.low {
+        border-left-color: #6b7280;
+      }
+
+      .notification-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .notification-title {
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      .notification-time {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+
+      .notification-message {
+        font-size: 13px;
+        margin-bottom: 10px;
+        opacity: 0.9;
+      }
+
+      .notification-apps {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .notification-app {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        font-size: 12px;
+      }
+
+      .app-quit-btn {
+        background: rgba(239, 68, 68, 0.2);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .app-quit-btn:hover {
+        background: rgba(239, 68, 68, 0.4);
+      }
+
+      .app-quit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* モーダル用スタイル */
+      .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal-content {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 80%;
+        overflow: hidden;
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        color: white;
+      }
+
+      .modal-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-body {
+        padding: 20px;
+        color: white;
+      }
+
+      .setting-group {
+        margin-bottom: 20px;
+      }
+
+      .setting-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+      }
+
+      .setting-group select {
+        width: 100%;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        font-size: 14px;
+      }
+
+      .setting-group input[type="checkbox"] {
+        margin-right: 8px;
+        transform: scale(1.2);
+      }
+
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .modal-footer button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      #saveSettingsBtn {
+        background: #4ade80;
+        color: #065f46;
+      }
+
+      #cancelSettingsBtn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+      }
+
+      .stats-charts {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+
+      .chart-container {
+        position: relative;
+        height: 300px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .chart-container canvas {
+        max-width: 100%;
+        height: auto;
+      }
+
+      .stats-table {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 15px;
+      }
+
+      .stats-table-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        align-items: center;
+      }
+
+      .stats-table-row:last-child {
+        border-bottom: none;
+      }
+
+      .stats-table-header {
+        font-weight: bold;
+        font-size: 12px;
+        opacity: 0.8;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .stats-table-cell {
+        font-size: 13px;
+      }
+
+      .stats-table-cell.app-name {
+        font-weight: 600;
+      }
+
+      .stats-table-cell.time {
+        color: #4ade80;
+      }
+
+      .stats-table-cell.sessions {
+        color: #60a5fa;
+      }
+
+      .stats-table-cell.average {
+        color: #fbbf24;
+      }
+
+      /* ダークモード対応 */
+      @media (prefers-color-scheme: dark) {
+        body {
+          color: #e0e0e0;
+        }
+
+        .header {
+          background: rgba(30, 30, 30, 0.95);
+        }
+
+        .header h1 {
+          color: #e0e0e0;
+        }
+
+        .header p {
+          color: #aaa;
+        }
+
+        .main-content {
+          background: rgba(30, 30, 30, 0.95);
+        }
+
+        .input-section,
+        .status-section,
+        .notifications-section,
+        .cpu-section,
+        .stats-section {
+          background: rgba(30, 30, 30, 0.8);
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .status-title {
+          color: #e0e0e0;
+        }
+
+        #userIntent {
+          background: rgba(40, 40, 40, 0.95);
+          color: #e0e0e0;
+        }
+
+        #userIntent::placeholder {
+          color: #777;
+        }
+
+        .quick-action {
+          background: rgba(40, 40, 40, 0.8);
+          color: #e0e0e0;
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .quick-action:hover {
+          background: rgba(0, 122, 255, 0.2);
+        }
+
+        button {
+          background: rgba(0, 122, 255, 0.8);
+        }
+
+        button:hover {
+          background: rgba(0, 122, 255, 1);
+        }
+      }
     </style>
   </head>
   <body>
@@ -946,6 +1515,82 @@
         </div> -->
       </div>
 
+      <!-- AI通知・提案セクション -->
+      <div class="notifications-section">
+        <div class="status-title">
+          <span class="status-indicator"></span>
+          <span class="material-icons" style="font-size: 18px"
+            >notifications</span
+          >
+          AI分析・通知履歴
+          <div class="notifications-controls">
+            <button
+              id="notificationSettingsBtn"
+              style="padding: 4px 8px; font-size: 11px; margin-right: 8px"
+            >
+              設定
+            </button>
+            <button
+              id="refreshNotificationsBtn"
+              style="padding: 4px 8px; font-size: 11px"
+            >
+              更新
+            </button>
+          </div>
+        </div>
+
+        <div class="notifications-content">
+          <div id="notificationsSummary" class="notifications-summary">
+            <!-- 通知サマリーがここに生成される -->
+          </div>
+
+          <div class="notifications-list" id="notificationsList">
+            <!-- 通知履歴がここに生成される -->
+          </div>
+        </div>
+
+        <!-- 設定モーダル -->
+        <div id="notificationSettingsModal" class="modal" style="display: none">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>AI分析・通知設定</h3>
+              <button class="modal-close" id="closeSettingsModal">
+                &times;
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="setting-group">
+                <label>分析実行間隔:</label>
+                <select id="analysisIntervalSelect">
+                  <option value="0">無効</option>
+                  <option value="60000">1分</option>
+                  <option value="300000">5分</option>
+                  <option value="900000">15分</option>
+                  <option value="1800000">30分</option>
+                  <option value="3600000">1時間</option>
+                </select>
+              </div>
+              <div class="setting-group">
+                <label>
+                  <input type="checkbox" id="enableNotifications" />
+                  AI分析結果の通知を有効にする
+                </label>
+              </div>
+              <div class="setting-group">
+                <label>
+                  <input type="checkbox" id="enableSystemNotifications" />
+                  macOSシステム通知を有効にする
+                </label>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button id="saveSettingsBtn">保存</button>
+              <button id="cancelSettingsBtn">キャンセル</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="cpu-section">
         <div class="status-title">
           <span class="status-indicator"></span>
@@ -957,6 +1602,22 @@
             更新
           </button>
         </div>
+
+        <!-- アクティブアプリ表示 -->
+        <div class="active-app-section">
+          <div class="active-app-title">
+            <span
+              class="material-icons"
+              style="font-size: 16px; margin-right: 8px"
+              >touch_app</span
+            >
+            アクティブアプリ
+          </div>
+          <div id="activeAppInfo" class="active-app-display">
+            <div class="active-app-name">取得中...</div>
+          </div>
+        </div>
+
         <div id="cpuInfo">
           <!-- CPU info will be populated here -->
         </div>
@@ -1070,6 +1731,76 @@
         </div>
         <div class="window-list" id="windowList">
           <!-- Windows will be populated here -->
+        </div>
+      </div>
+
+      <!-- フォーカス統計セクション -->
+      <div class="stats-section">
+        <div class="status-title">
+          <span class="status-indicator"></span>
+          <span class="material-icons" style="font-size: 18px">analytics</span>
+          アプリ使用統計
+          <div class="stats-controls">
+            <select
+              id="timeRange"
+              style="
+                margin-right: 8px;
+                padding: 2px 4px;
+                font-size: 11px;
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+              "
+            >
+              <option value="today">今日</option>
+              <option value="week">今週</option>
+              <option value="month">今月</option>
+              <option value="all">全期間</option>
+            </select>
+            <button
+              id="statsRefreshBtn"
+              style="padding: 4px 8px; font-size: 11px"
+            >
+              更新
+            </button>
+          </div>
+        </div>
+
+        <div class="stats-content">
+          <div id="statsSummary" class="summary-grid">
+            <!-- サマリー統計がここに生成される -->
+          </div>
+
+          <div class="stats-charts">
+            <div class="chart-container">
+              <h4
+                style="text-align: center; margin-bottom: 15px; font-size: 14px"
+              >
+                アプリ別使用時間
+              </h4>
+              <canvas id="focusChart" width="400" height="250"></canvas>
+            </div>
+          </div>
+
+          <div class="stats-table">
+            <h4 style="margin-bottom: 10px; font-size: 14px">詳細統計</h4>
+            <div id="statsTable">
+              <!-- 統計テーブルがここに生成される -->
+            </div>
+          </div>
+
+          <div
+            id="dataInfo"
+            style="
+              margin-top: 15px;
+              padding-top: 15px;
+              border-top: 1px solid rgba(255, 255, 255, 0.2);
+              font-size: 12px;
+            "
+          >
+            <!-- データ情報がここに生成される -->
+          </div>
         </div>
       </div>
 
