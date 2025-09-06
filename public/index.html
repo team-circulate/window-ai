@@ -124,7 +124,7 @@
         gap: 0;
         align-items: stretch;
         background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.25);
+        border: 1px solid rgba(0, 0, 0, 0.12);
         border-radius: 12px;
         overflow: hidden;
       }
@@ -158,13 +158,13 @@
 
       #userIntent::placeholder,
       #taskPromptInput::placeholder {
-        color: #6b7280;
+        color: #9ca3af;
       }
 
       button {
         padding: 12px 24px;
-        background: rgba(0, 122, 255, 0.9);
-        color: white;
+        background: #111;
+        color: #fff;
         border: none;
         border-radius: 10px;
         font-size: 14px;
@@ -174,7 +174,7 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        box-shadow: 0 2px 10px rgba(0, 122, 255, 0.3);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
       }
@@ -185,8 +185,8 @@
 
       button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 20px rgba(0, 122, 255, 0.4);
-        background: rgba(0, 122, 255, 1);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        background: #000;
       }
 
       button:disabled {
@@ -204,10 +204,10 @@
 
       /* ヒーロー検索の一体型ボタン */
       .inline-action-btn {
-        background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+        background: #111;
         color: white;
         border-radius: 0 12px 12px 0;
-        border-left: 1px solid rgba(255, 255, 255, 0.25);
+        border-left: 1px solid rgba(0, 0, 0, 0.25);
         padding: 0 18px;
         min-width: 120px;
         position: relative;
@@ -220,10 +220,10 @@
       }
 
       .inline-success-btn {
-        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        background: #111;
         color: white;
         border-radius: 0 12px 12px 0;
-        border-left: 1px solid rgba(255, 255, 255, 0.25);
+        border-left: 1px solid rgba(0, 0, 0, 0.25);
         padding: 0 18px;
         min-width: 110px;
         position: relative;
@@ -241,9 +241,9 @@
       }
 
       .inline-secondary-btn {
-        background: rgba(255, 255, 255, 0.1);
+        background: #111;
         color: white;
-        border-left: 1px solid rgba(255, 255, 255, 0.25);
+        border-left: 1px solid rgba(0, 0, 0, 0.25);
         border-radius: 0 12px 12px 0;
         padding: 0 14px;
         min-width: 96px;
@@ -265,11 +265,12 @@
         left: 16px;
         top: 50%;
         transform: translateY(-50%);
-        color: #6b7280;
+        color: #9ca3af;
         font-size: 22px;
         width: 24px;
         text-align: center;
         pointer-events: none;
+        z-index: 2;
       }
 
       .input-with-icon input {
@@ -381,9 +382,9 @@
         height: 18px;
         min-width: 18px;
         border-radius: 4px;
-        background: rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        color: rgba(255, 255, 255, 0.9);
+        background: rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        color: #333;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
@@ -399,8 +400,8 @@
       }
 
       .app-info-btn:hover {
-        background: rgba(255, 255, 255, 0.25);
-        border-color: rgba(255, 255, 255, 0.4);
+        background: rgba(0, 0, 0, 0.08);
+        border-color: rgba(0, 0, 0, 0.2);
         transform: scale(1.05);
       }
 
@@ -474,6 +475,7 @@
         font-weight: 600;
         font-size: 14px;
         margin-bottom: 4px;
+        color: #374151; /* gray-700 */
       }
 
       .app-search-version {
@@ -517,6 +519,7 @@
 
       .window-main-info {
         margin-bottom: 4px;
+        color: #374151; /* gray-700 */
       }
 
       .window-resource-usage {
@@ -593,10 +596,10 @@
       /* ウィンドウコントロールボタン - 統一されたスタイル */
       .window-ctrl-btn {
         padding: 6px 10px;
-        background: rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(0, 0, 0, 0.04);
+        border: 1px solid rgba(0, 0, 0, 0.12);
         border-radius: 6px;
-        color: white;
+        color: #333;
         cursor: pointer;
         transition: all 0.2s;
         display: inline-flex;
@@ -611,10 +614,11 @@
       .window-ctrl-btn .material-icons,
       .window-ctrl-btn .material-symbols-outlined {
         font-size: 16px;
+        color: #111 !important;
       }
 
       .window-ctrl-btn:hover {
-        background: rgba(255, 255, 255, 0.25);
+        background: rgba(0, 0, 0, 0.08);
         transform: translateY(-1px);
       }
 
@@ -622,6 +626,7 @@
       .window-ctrl-btn.close {
         background: rgba(244, 67, 54, 0.2);
         border-color: rgba(244, 67, 54, 0.3);
+        color: #111;
       }
 
       .window-ctrl-btn.close:hover {
@@ -632,6 +637,7 @@
       .window-ctrl-btn.minimize {
         background: rgba(255, 193, 7, 0.2);
         border-color: rgba(255, 193, 7, 0.3);
+        color: #111;
       }
 
       .window-ctrl-btn.minimize:hover {
@@ -642,6 +648,7 @@
       .window-ctrl-btn.maximize {
         background: rgba(76, 175, 80, 0.2);
         border-color: rgba(76, 175, 80, 0.3);
+        color: #111;
       }
 
       .window-ctrl-btn.maximize:hover {
@@ -652,6 +659,7 @@
       .window-ctrl-btn.quit {
         background: rgba(156, 39, 176, 0.2);
         border-color: rgba(156, 39, 176, 0.3);
+        color: #111;
       }
 
       .window-ctrl-btn.quit:hover {
@@ -824,6 +832,7 @@
       .preset-name {
         font-weight: 600;
         margin-bottom: 2px;
+        color: #374151; /* gray-700 */
       }
 
       .preset-details {
@@ -838,22 +847,23 @@
 
       .preset-btn {
         padding: 6px 10px;
-        background: rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(0, 0, 0, 0.04);
+        border: 1px solid rgba(0, 0, 0, 0.12);
         border-radius: 6px;
-        color: white;
+        color: #111;
         cursor: pointer;
         font-size: 12px;
         transition: all 0.2s;
       }
 
       .preset-btn:hover {
-        background: rgba(255, 255, 255, 0.25);
+        background: rgba(0, 0, 0, 0.08);
       }
 
       .preset-btn.load {
         background: rgba(33, 150, 243, 0.3);
         border-color: rgba(33, 150, 243, 0.5);
+        color: #4b5563; /* gray-600 */
       }
 
       .preset-btn.load:hover {
@@ -863,10 +873,29 @@
       .preset-btn.delete {
         background: rgba(244, 67, 54, 0.3);
         border-color: rgba(244, 67, 54, 0.5);
+        color: white;
       }
 
       .preset-btn.delete:hover {
         background: rgba(244, 67, 54, 0.5);
+      }
+
+      /* プリセット右側のボタン内アイコンを黒で視認性アップ */
+      .preset-btn .material-icons,
+      .preset-btn .material-symbols-outlined {
+        color: #111 !important;
+        opacity: 0.95;
+      }
+
+      /* ライトテーマ: 現在のウィンドウ右端の更新ボタンを視認性高く */
+      #windowRefreshBtn {
+        background: rgba(0, 0, 0, 0.04) !important;
+        border: 1px solid rgba(0, 0, 0, 0.12) !important;
+        color: #333 !important;
+      }
+
+      #windowRefreshBtn:hover {
+        background: rgba(0, 0, 0, 0.08) !important;
       }
 
       .active-app-section {
@@ -955,6 +984,7 @@
         margin-bottom: 8px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        color: #6b7280; /* gray-500 */
       }
 
       .summary-value {
@@ -1345,6 +1375,27 @@
           color: #e0e0e0;
         }
 
+        /* 入力グループのボーダーは暗色背景で見えるよう白系に戻す */
+        .input-group {
+          border-color: rgba(255, 255, 255, 0.25);
+          background: rgba(255, 255, 255, 0.12);
+        }
+
+        /* ボタンのコントラストをダーク時に白系へ */
+        .window-ctrl-btn,
+        .preset-btn,
+        .app-info-btn {
+          background: rgba(255, 255, 255, 0.15);
+          border-color: rgba(255, 255, 255, 0.25);
+          color: #e0e0e0;
+        }
+
+        .window-ctrl-btn:hover,
+        .preset-btn:hover,
+        .app-info-btn:hover {
+          background: rgba(255, 255, 255, 0.25);
+        }
+
         .header {
           background: rgba(30, 30, 30, 0.95);
         }
@@ -1390,15 +1441,26 @@
         }
 
         .quick-action:hover {
-          background: rgba(0, 122, 255, 0.2);
+          background: rgba(255, 255, 255, 0.2);
         }
 
         button {
-          background: rgba(0, 122, 255, 0.8);
+          background: #111;
         }
 
         button:hover {
-          background: rgba(0, 122, 255, 1);
+          background: #000;
+        }
+
+        /* ダークテーマでは更新ボタンを白系のまま */
+        #windowRefreshBtn {
+          background: rgba(255, 255, 255, 0.15) !important;
+          border-color: rgba(255, 255, 255, 0.25) !important;
+          color: white !important;
+        }
+
+        #windowRefreshBtn:hover {
+          background: rgba(255, 255, 255, 0.25) !important;
         }
       }
     </style>
