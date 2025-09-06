@@ -45,6 +45,11 @@ contextBridge.exposeInMainWorld("windowAPI", {
   appModeEnd: (): Promise<void> => {
     return ipcRenderer.invoke("app-mode-end");
   },
+
+  // メモリ情報取得
+  getMemoryInfo: (): Promise<import("./types").MemoryInfo> => {
+    return ipcRenderer.invoke("get-memory-info");
+  },
 });
 
 declare global {

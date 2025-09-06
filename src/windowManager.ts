@@ -3,7 +3,7 @@ import { screen } from "electron";
 import * as os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WindowState, WindowInfo, Display, WindowAction, CpuInfo, ProcessInfo, AppResourceUsage } from "./types";
+import { WindowState, WindowInfo, Display, WindowAction, CpuInfo, ProcessInfo, AppResourceUsage, MemoryInfo, MemoryPressureLevel } from "./types";
 
 const execAsync = promisify(exec);
 
@@ -943,6 +943,106 @@ export class WindowManager {
         usage: 0,
         processes: [],
       };
+    }
+  }
+
+  async getMemoryInfo(): Promise<MemoryInfo> {
+    try {
+      // 1) memory_pressure -l を優先
+      const mp = await execAsync("memory_pressure -l");
+      const level = this.parseMemoryPressureLevel(mp.stdout || mp.stderr || "");
+      if (level) {
+        const nodeInfo = this.getNodeMemorySnapshot(level, 'memory_pressure');
+        return nodeInfo;
+      }
+    } catch (e) {
+      // ignore and fallback
+    }
+
+    try {
+      // 2) vm_stat で概算
+      const { stdout } = await execAsync("vm_stat");
+      const vm = this.parseVmStat(stdout);
+      if (vm) {
+        return vm;
+      }
+    } catch (e) {
+      // ignore and fallback
+    }
+
+    // 3) Nodeのosで大雑把に
+    return this.getNodeMemorySnapshot('normal', 'node');
+  }
+
+  private parseMemoryPressureLevel(output: string): MemoryPressureLevel | null {
+    const lower = output.toLowerCase();
+    if (lower.includes('normal')) return 'normal';
+    if (lower.includes('warning')) return 'warning';
+    if (lower.includes('critical')) return 'critical';
+    return null;
+  }
+
+  private getNodeMemorySnapshot(level: MemoryPressureLevel, source: MemoryInfo['source']): MemoryInfo {
+    const totalMB = Math.round((os.totalmem() / 1024 / 1024) * 10) / 10;
+    const freeMB = Math.round((os.freemem() / 1024 / 1024) * 10) / 10;
+    const usedMB = Math.max(totalMB - freeMB, 0);
+    const usedPercent = totalMB > 0 ? Math.round((usedMB / totalMB) * 1000) / 10 : 0;
+    return {
+      totalMB,
+      usedMB,
+      freeMB,
+      usedPercent,
+      pressure: level,
+      source,
+      timestamp: Date.now(),
+    };
+  }
+
+  private parseVmStat(stdout: string): MemoryInfo | null {
+    try {
+      // vm_stat の各行から数字を抽出（pagesizeは4096バイトが多い）
+      const pageSizeMatch = stdout.match(/page size of (\d+) bytes/);
+      const pageSize = pageSizeMatch ? parseInt(pageSizeMatch[1], 10) : 4096;
+
+      const parseLine = (key: string) => {
+        const m = stdout.match(new RegExp(`${key}:\\s+(\\d+)\\.`));
+        return m ? parseInt(m[1], 10) : 0;
+      };
+
+      const free = parseLine('Pages free');
+      const speculative = parseLine('Pages speculative');
+      const active = parseLine('Pages active');
+      const inactive = parseLine('Pages inactive');
+      const wired = parseLine('Pages wired down|Pages wired');
+      const purgeable = parseLine('Pages purgeable');
+      const compressed = parseLine('Pages occupied by compressor');
+
+      const freePages = free + speculative;
+      const usedPages = active + inactive + wired + compressed; // 概算
+
+      const totalPages = freePages + usedPages;
+      if (totalPages <= 0) return null;
+
+      const totalMB = Math.round(((totalPages * pageSize) / 1024 / 1024) * 10) / 10;
+      const freeMB = Math.round(((freePages * pageSize) / 1024 / 1024) * 10) / 10;
+      const usedMB = Math.max(totalMB - freeMB, 0);
+      const usedPercent = totalMB > 0 ? Math.round((usedMB / totalMB) * 1000) / 10 : 0;
+
+      let pressure: MemoryPressureLevel = 'normal';
+      if (usedPercent >= 80) pressure = 'critical';
+      else if (usedPercent >= 60) pressure = 'warning';
+
+      return {
+        totalMB,
+        usedMB,
+        freeMB,
+        usedPercent,
+        pressure,
+        source: 'vm_stat',
+        timestamp: Date.now(),
+      };
+    } catch {
+      return null;
     }
   }
 

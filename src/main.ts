@@ -5,6 +5,7 @@ import {
   systemPreferences,
   dialog,
   nativeImage,
+  NativeImage,
   Tray,
   Menu,
   nativeTheme,
@@ -23,6 +24,92 @@ let spotlightWindow: BrowserWindow | null = null;
 let windowManager: WindowManager;
 let claudeService: ClaudeService;
 let tray: Tray | null = null;
+
+// Trayアニメーション用の状態
+let trayAnimFrames: NativeImage[] = [];
+let trayAnimIndex = 0;
+let trayAnimTimer: NodeJS.Timeout | null = null;
+let trayAnimFps = 2; // 初期は低速
+let memMonitorTimer: NodeJS.Timeout | null = null;
+let currentMemoryPressure: 'normal' | 'warning' | 'critical' = 'normal';
+
+function loadTrayAnimFrames(): NativeImage[] {
+  try {
+    const iconsDir = path.join(__dirname, "../assets/icons");
+    const names = ["pen1.png", "pen2.png", "pen3.png", "pen4.png", "pen5.png"];
+    const frames: NativeImage[] = [];
+    for (const name of names) {
+      const p = path.join(iconsDir, name);
+      if (fs.existsSync(p)) {
+        let img = nativeImage.createFromPath(p);
+        if (!img.isEmpty()) {
+          img = img.resize({ width: 16, height: 16 });
+          frames.push(img);
+        }
+      }
+    }
+    return frames;
+  } catch (e) {
+    console.error('Failed to load tray animation frames:', e);
+    return [];
+  }
+}
+
+function startTrayAnimation() {
+  if (!tray) return;
+  if (!trayAnimFrames || trayAnimFrames.length === 0) return;
+  if (trayAnimTimer) {
+    clearInterval(trayAnimTimer);
+    trayAnimTimer = null;
+  }
+  const intervalMs = Math.max(1000 / Math.max(trayAnimFps, 1), 16);
+  trayAnimTimer = setInterval(() => {
+    if (!tray) return;
+    tray.setImage(trayAnimFrames[trayAnimIndex]);
+    trayAnimIndex = (trayAnimIndex + 1) % trayAnimFrames.length;
+  }, intervalMs);
+}
+
+function setTrayAnimFps(fps: number) {
+  trayAnimFps = fps;
+  startTrayAnimation();
+}
+
+function applyPressureToFps(pressure: 'normal' | 'warning' | 'critical') {
+  switch (pressure) {
+    case 'critical':
+      setTrayAnimFps(12);
+      break;
+    case 'warning':
+      setTrayAnimFps(8);
+      break;
+    default:
+      setTrayAnimFps(2);
+      break;
+  }
+}
+
+function startMemoryMonitoring() {
+  const check = async () => {
+    try {
+      const info = await windowManager.getMemoryInfo();
+      if (info && info.pressure !== currentMemoryPressure) {
+        currentMemoryPressure = info.pressure;
+        applyPressureToFps(currentMemoryPressure);
+      }
+    } catch (e) {
+      // 失敗時は何もしない（前回の状態を維持）
+    }
+  };
+
+  // 初回チェック
+  check();
+
+  if (memMonitorTimer) {
+    clearInterval(memMonitorTimer);
+  }
+  memMonitorTimer = setInterval(check, 5000);
+}
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -324,6 +411,15 @@ app.whenReady().then(async () => {
   // createWindow();
   createTray();
   
+  // トレイアニメーションのプリロードと開始
+  trayAnimFrames = loadTrayAnimFrames();
+  if (trayAnimFrames.length > 0) {
+    startTrayAnimation();
+    startMemoryMonitoring();
+  } else {
+    console.warn('No tray animation frames found (pen1..pen5).');
+  }
+  
   // グローバルホットキーの登録
   // Option+Shift+W でSpotlightウィンドウの表示/非表示を切り替え
   const toggleWindowHotkey = 'Option+Shift+W';
@@ -549,6 +645,15 @@ app.whenReady().then(async () => {
     async (): Promise<import("./types").CpuInfo> => {
       console.log("Getting CPU info");
       return await windowManager.getCpuInfo();
+    }
+  );
+
+  // メモリ情報を返す
+  ipcMain.handle(
+    "get-memory-info",
+    async (): Promise<import("./types").MemoryInfo> => {
+      console.log("Getting Memory info");
+      return await windowManager.getMemoryInfo();
     }
   );
 });
