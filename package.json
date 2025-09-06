@@ -1,0 +1,25 @@
+{
+  "name": "window-ai",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "npm run build && electron .",
+    "dev": "tsc -w & electron .",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "AI-powered window management for macOS",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "electron": "^28.1.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "@jxa/run": "^1.3.4",
+    "dotenv": "^17.2.2",
+    "node-mac-permissions": "^2.3.0"
+  }
+}

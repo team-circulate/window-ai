@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Window AI Manager</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header {
+      padding: 20px;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(10px);
+    }
+    
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+    
+    .main-content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    
+    .input-section {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .input-group {
+      display: flex;
+      gap: 10px;
+    }
+    
+    #userIntent {
+      flex: 1;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #333;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+    
+    #userIntent::placeholder {
+      color: #999;
+    }
+    
+    button {
+      padding: 12px 24px;
+      background: white;
+      color: #667eea;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+    }
+    
+    .quick-action {
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      font-size: 13px;
+    }
+    
+    .quick-action:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .status-section {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .status-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .window-list {
+      display: grid;
+      gap: 8px;
+    }
+    
+    .window-item {
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+    
+    .window-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .app-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    
+    .app-icon-placeholder {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+      border-radius: 6px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    
+    .app-icon-placeholder::before {
+      content: "📱";
+    }
+    
+    .state-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      margin-left: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .window-actions {
+      display: flex;
+      gap: 5px;
+    }
+    
+    .mini-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .mini-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    
+    .mini-btn.restore-btn {
+      background: rgba(76, 175, 80, 0.3);
+      border-color: rgba(76, 175, 80, 0.5);
+    }
+    
+    .mini-btn.restore-btn:hover {
+      background: rgba(76, 175, 80, 0.5);
+    }
+    
+    .mini-btn.close-btn {
+      background: rgba(244, 67, 54, 0.3);
+      border-color: rgba(244, 67, 54, 0.5);
+      min-width: auto;
+      padding: 4px 10px;
+    }
+    
+    .mini-btn.close-btn:hover {
+      background: rgba(244, 67, 54, 0.5);
+    }
+    
+    .mini-btn.quit-btn {
+      background: rgba(255, 152, 0, 0.3);
+      border-color: rgba(255, 152, 0, 0.5);
+    }
+    
+    .mini-btn.quit-btn:hover {
+      background: rgba(255, 152, 0, 0.5);
+    }
+    
+    .log-section {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      padding: 15px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .log-entry {
+      padding: 8px;
+      margin-bottom: 5px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'Monaco', monospace;
+    }
+    
+    .log-entry.success {
+      border-left: 3px solid #4ade80;
+    }
+    
+    .log-entry.error {
+      border-left: 3px solid #f87171;
+    }
+    
+    .log-entry.info {
+      border-left: 3px solid #60a5fa;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🪟 Window AI Manager</h1>
+    <p>AIがウィンドウ配置を最適化します</p>
+  </div>
+  
+  <div class="main-content">
+    <div class="input-section">
+      <div class="input-group">
+        <input 
+          type="text" 
+          id="userIntent" 
+          placeholder="例: Safariを左側、VSCodeを右側に配置して"
+        >
+        <button id="analyzeBtn">分析・実行</button>
+        <button id="refreshBtn">更新</button>
+      </div>
+      
+      <div class="quick-actions">
+        <button class="quick-action" data-intent="作業用レイアウトにして">作業用</button>
+        <button class="quick-action" data-intent="2画面に分割して">2分割</button>
+        <button class="quick-action" data-intent="すべてのウィンドウをグリッド表示">グリッド</button>
+        <button class="quick-action" data-intent="カスケード表示にして">カスケード</button>
+        <button class="quick-action" data-intent="メインウィンドウを中央に配置">中央配置</button>
+      </div>
+    </div>
+    
+    <div class="status-section">
+      <div class="status-title">
+        <span class="status-indicator"></span>
+        現在のウィンドウ
+      </div>
+      <div class="window-list" id="windowList">
+        <!-- Windows will be populated here -->
+      </div>
+    </div>
+    
+    <div class="log-section">
+      <div id="logContainer">
+        <div class="log-entry info">Window AI Manager 起動完了</div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="renderer.js"></script>
+</body>
+</html>
