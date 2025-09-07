@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Window AI - オンボーディング</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
       * {
         margin: 0;
@@ -14,8 +15,8 @@
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
           "Helvetica Neue", Arial, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: #fff;
+        background: #f8fafc;
+        color: #334155;
         height: 100vh;
         display: flex;
         flex-direction: column;
@@ -23,35 +24,53 @@
         justify-content: center;
         -webkit-app-region: drag;
         user-select: none;
+        overflow: hidden;
       }
 
       .container {
         width: 90%;
-        max-width: 800px;
+        max-width: 900px;
         -webkit-app-region: no-drag;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 16px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+        padding: 40px;
+        margin: 20px;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
       }
 
       h1 {
-        font-size: 2.5rem;
-        margin-bottom: 1rem;
-        text-align: center;
+        font-size: 2rem;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
       }
 
       .subtitle {
-        font-size: 1.2rem;
-        margin-bottom: 2rem;
-        text-align: center;
-        opacity: 0.9;
+        font-size: 1rem;
+        margin-bottom: 0;
+        color: #64748b;
+        font-weight: 400;
       }
 
       .apps-container {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 2rem;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 12px;
+        padding: 20px;
         max-height: 400px;
         overflow-y: auto;
-        margin-bottom: 2rem;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
       }
 
       .apps-grid {
@@ -160,38 +179,46 @@
         background: linear-gradient(135deg, #06beb6 0%, #48b1bf 100%);
         color: white;
         border: none;
-        padding: 1rem 3rem;
-        font-size: 1.2rem;
-        border-radius: 50px;
+        padding: 14px 28px;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 8px;
         cursor: pointer;
-        transition: transform 0.3s, box-shadow 0.3s;
-        display: block;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
         margin: 0 auto;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 2px 8px rgba(6, 190, 182, 0.3);
+        min-width: 180px;
       }
 
       .analyze-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        background: linear-gradient(135deg, #059692 0%, #3d9aa3 100%);
+        box-shadow: 0 4px 16px rgba(6, 190, 182, 0.4);
+        transform: translateY(-1px);
       }
 
       .analyze-button:disabled {
-        opacity: 0.5;
+        opacity: 0.6;
         cursor: not-allowed;
         transform: none;
+        background: #94a3b8;
+        box-shadow: none;
       }
 
       .progress-container {
-        margin-top: 2rem;
+        margin-top: 24px;
         display: none;
       }
 
       .progress-bar {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 10px;
-        height: 10px;
+        background: #e2e8f0;
+        border-radius: 8px;
+        height: 8px;
         overflow: hidden;
-        margin-bottom: 1rem;
+        margin-bottom: 16px;
       }
 
       .progress-fill {
@@ -199,60 +226,84 @@
         height: 100%;
         width: 0%;
         transition: width 0.3s;
+        border-radius: 8px;
       }
 
       .progress-text {
         text-align: center;
-        font-size: 0.9rem;
-        opacity: 0.9;
+        font-size: 14px;
+        font-weight: 500;
+        color: #475569;
+        margin-bottom: 8px;
       }
 
       .progress-details {
         display: flex;
         justify-content: space-between;
-        margin-top: 0.5rem;
-        font-size: 0.85rem;
-        opacity: 0.8;
+        margin-top: 8px;
+        font-size: 12px;
+        color: #64748b;
       }
 
       .progress-time {
-        color: #a7f3d0;
+        color: #06beb6;
         font-weight: 500;
       }
 
       .app-count {
         text-align: center;
-        margin-bottom: 1rem;
-        font-size: 1.1rem;
-        opacity: 0.9;
+        margin-bottom: 16px;
+        font-size: 15px;
+        font-weight: 500;
+        color: #64748b;
       }
 
       /* スクロールバースタイル */
       .apps-container::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
       }
 
       .apps-container::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
+        background: #f1f5f9;
+        border-radius: 6px;
       }
 
       .apps-container::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 10px;
+        background: #cbd5e1;
+        border-radius: 6px;
       }
 
       .apps-container::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.5);
+        background: #94a3b8;
+      }
+
+      /* Material Icons対応 */
+      .material-icons {
+        font-family: 'Material Icons';
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>Window AI へようこそ</h1>
-      <p class="subtitle">
-        インストール済みのアプリケーションを分析して、より良い体験を提供します
-      </p>
+      <div class="header">
+        <h1>
+          <span class="material-icons">analytics</span>
+          Window AI へようこそ
+        </h1>
+        <p class="subtitle">
+          インストール済みのアプリケーションを分析して、より良い体験を提供します
+        </p>
+      </div>
 
       <div class="apps-container">
         <div id="appCount" class="app-count"></div>
@@ -265,6 +316,7 @@
       </div>
 
       <button id="analyzeBtn" class="analyze-button" disabled>
+        <span class="material-icons">science</span>
         分析を開始
       </button>
 

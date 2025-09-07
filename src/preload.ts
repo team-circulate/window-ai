@@ -89,6 +89,10 @@ contextBridge.exposeInMainWorld("windowAPI", {
     return ipcRenderer.invoke("save-preset", name, description);
   },
 
+  saveLayoutAsPreset: (name: string, description: string, layoutWindows: any[]): Promise<any> => {
+    return ipcRenderer.invoke("save-layout-as-preset", name, description, layoutWindows);
+  },
+
   getPresets: (): Promise<any[]> => {
     return ipcRenderer.invoke("get-presets");
   },

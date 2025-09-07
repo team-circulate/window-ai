@@ -188,6 +188,72 @@ function displayOptimalLayouts(layouts) {
     const layoutCard = createLayoutCard(layout, index);
     layoutsGrid.appendChild(layoutCard);
   });
+
+  // 自動でプリセットとして保存
+  saveLayoutsAsPresets(layouts);
+}
+
+async function saveLayoutsAsPresets(layouts) {
+  try {
+    console.log('🔄 Auto-saving generated layouts as presets...');
+    
+    for (let i = 0; i < layouts.length && i < 3; i++) {
+      const layout = layouts[i];
+      const presetName = `${layout.name} (オンボーディング)`;
+      const presetDescription = `${layout.description}\n理由: ${layout.reasoning}`;
+      
+      // AIで生成されたレイアウト情報を直接プリセットとして保存
+      await window.windowAPI.saveLayoutAsPreset(
+        presetName, 
+        presetDescription, 
+        layout.preset.windows
+      );
+      console.log(`✅ Saved layout preset: ${presetName} with ${layout.preset.windows.length} windows`);
+    }
+    
+    console.log('✅ All generated layouts saved as presets');
+    
+    // 保存完了メッセージを表示
+    showPresetSavedNotification();
+  } catch (error) {
+    console.error('❌ Failed to save layouts as presets:', error);
+  }
+}
+
+function showPresetSavedNotification() {
+  // 一時的な通知を表示
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+  `;
+  notification.innerHTML = '📋 3つの配置をプリセットとして保存しました！';
+  
+  document.body.appendChild(notification);
+  
+  // アニメーションで表示
+  setTimeout(() => {
+    notification.style.transform = 'translateX(0)';
+  }, 100);
+  
+  // 3秒後に非表示
+  setTimeout(() => {
+    notification.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 300);
+  }, 3000);
 }
 
 function createLayoutCard(layout, index) {
