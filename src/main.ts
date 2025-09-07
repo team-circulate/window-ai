@@ -1034,6 +1034,33 @@ app.whenReady().then(async () => {
     }
   );
 
+  // AIで生成されたレイアウトを直接プリセットとして保存
+  ipcMain.handle(
+    "save-layout-as-preset",
+    async (_, name: string, description: string, layoutWindows: any[]) => {
+      try {
+        const windows = layoutWindows.map(w => ({
+          appName: w.appName,
+          position: {
+            x: w.position.x,
+            y: w.position.y,
+          },
+          size: {
+            width: w.size.width,
+            height: w.size.height,
+          },
+        }));
+
+        const preset = presetManager.createPreset(name, description, windows);
+        console.log(`✅ Layout preset saved: ${preset.name} with ${windows.length} windows`);
+        return preset;
+      } catch (error) {
+        console.error('❌ Failed to save layout preset:', error);
+        throw error;
+      }
+    }
+  );
+
   ipcMain.handle("get-presets", async () => {
     return presetManager.getAllPresets();
   });
@@ -1061,14 +1088,35 @@ app.whenReady().then(async () => {
     await Promise.all(minimizePromises);
 
     // プリセットのウィンドウを復元（アプリ起動は並列、配置は順次）
-    // まず全アプリを並列で起動
-    const launchPromises = preset.windows.map((windowPreset) =>
-      appScanner.launchApp(windowPreset.appName)
+    console.log(`🚀 Launching ${preset.windows.length} apps for preset...`);
+    
+    // まず全アプリを並列で起動（リトライ機能付き）
+    const launchResults = await Promise.allSettled(
+      preset.windows.map(async (windowPreset) => {
+        try {
+          const launched = await appScanner.launchApp(windowPreset.appName);
+          if (!launched) {
+            // リトライ（1秒後にもう一度試行）
+            console.log(`⚠️ Retrying launch for ${windowPreset.appName}`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return await appScanner.launchApp(windowPreset.appName);
+          }
+          return launched;
+        } catch (error) {
+          console.error(`❌ Failed to launch ${windowPreset.appName}:`, error);
+          return false;
+        }
+      })
     );
-    await Promise.all(launchPromises);
 
-    // アプリが起動するまで少し待機（1回だけ）
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // 起動結果をログ出力
+    const successCount = launchResults.filter(r => r.status === 'fulfilled' && r.value).length;
+    console.log(`✅ Successfully launched ${successCount}/${preset.windows.length} apps`);
+
+    // アプリが起動するまで適切に待機（起動数に応じて調整）
+    const waitTime = Math.min(3000, Math.max(1500, preset.windows.length * 500));
+    console.log(`⏳ Waiting ${waitTime}ms for apps to fully start...`);
+    await new Promise((resolve) => setTimeout(resolve, waitTime));
 
     // ウィンドウの配置とサイズ調整を並列実行
     const restorePromises = preset.windows.map(async (windowPreset) => {
